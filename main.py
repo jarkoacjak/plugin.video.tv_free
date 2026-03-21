@@ -3,55 +3,58 @@ import urllib.parse
 import xbmcgui
 import xbmcplugin
 
-# Globálne premenné
+# Globálne premenné pre Kodi
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-def create_item(label, url, is_folder=False, icon=None, playable=False):
-    """Pomocná funkcia na vytvorenie položky v Kodi menu."""
+def create_item(label, url, is_folder=False, icon=None, is_playable=False):
+    """Pomocná funkcia na vytvorenie položky v zozname."""
     list_item = xbmcgui.ListItem(label=label)
     if icon:
         list_item.setArt({'icon': icon, 'thumb': icon})
     
-    if playable:
+    if is_playable:
         list_item.setProperty('IsPlayable', 'true')
-        # Povieme Kodi, že ide o video stream
-        list_item.setInfo('video', {'title': label})
-        # Vynútime použitie InputStream Adaptive pre stabilitu m3u8
+        # Informácie pre prehrávač
+        list_item.setInfo('video', {'title': label, 'mediatype': 'video'})
+        
+        # HLAVNÁ OPRAVA: Vynútenie InputStream Adaptive pre m3u8
         list_item.setProperty('inputstream', 'inputstream.adaptive')
         list_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        list_item.setProperty('inputstream.adaptive.m3u8_max_bw', '20000000')
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
 def main_menu():
-    """Hlavné menu: Slovenské a České TV."""
+    """Hlavné menu doplnku."""
     create_item("Slovenské TV", f"{BASE_URL}?action=list_sk", is_folder=True)
     create_item("České TV", f"{BASE_URL}?action=list_cz", is_folder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_tv():
     """Zoznam slovenských staníc."""
-    # TV JOJ - tvoj overený m3u8
-    joj_m3u8 = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
+    # TV JOJ Stream
+    joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     
-    # OPRAVA PREHRÁVANIA: Pridanie User-Agenta a overenia (bez toho server JOJ spojenie ukončí)
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    full_url = f"{joj_m3u8}|User-Agent={user_agent}&Referer=https://www.joj.sk/"
+    # Pridanie hlavičiek (User-Agent a Referer sú pre JOJ kľúčové)
+    headers = "|User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36&Referer=https://www.joj.sk/"
+    full_url = joj_url + headers
     
-    # Logo z tvojho odkazu
+    # Logo z YouTube (priamy odkaz)
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
     
-    create_item("TV JOJ", full_url, is_folder=False, icon=joj_logo, playable=True)
+    create_item("TV JOJ", full_url, is_folder=False, icon=joj_logo, is_playable=True)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def show_cz_announcement():
-    """Oprava pre České TV: Zobrazenie oznámenia."""
+    """Upozornenie pre České TV - Opravené zobrazenie."""
     dialog = xbmcgui.Dialog()
+    # Použijeme okno OK, ktoré sa musí potvrdiť, aby si ho videl
     dialog.ok("TV Free", "Pripravujeme čoskoro!")
-    # Po odkliknutí "OK" vrátime používateľa do hlavného menu
+    # Po potvrdení obnovíme hlavné menu
     main_menu()
 
-# --- SMEROVANIE (ROUTER) ---
+# --- ROUTER (SMEROVANIE) ---
 params = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
 action = params.get('action')
 
