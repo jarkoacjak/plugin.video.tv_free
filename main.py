@@ -1,67 +1,66 @@
 import sys
-import urllib.parse
 import xbmcgui
 import xbmcplugin
+import urllib.parse
 
-# Globálne premenné pre Kodi
+# Premenné pre Kodi
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-def create_item(label, url, is_folder=False, icon=None, is_playable=False):
-    """Pomocná funkcia na vytvorenie položky v zozname."""
-    list_item = xbmcgui.ListItem(label=label)
-    if icon:
-        list_item.setArt({'icon': icon, 'thumb': icon})
-    
-    if is_playable:
-        list_item.setProperty('IsPlayable', 'true')
-        # Informácie pre prehrávač
-        list_item.setInfo('video', {'title': label, 'mediatype': 'video'})
-        
-        # HLAVNÁ OPRAVA: Vynútenie InputStream Adaptive pre m3u8
-        list_item.setProperty('inputstream', 'inputstream.adaptive')
-        list_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
-        list_item.setProperty('inputstream.adaptive.m3u8_max_bw', '20000000')
-
-    xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
-
 def main_menu():
-    """Hlavné menu doplnku."""
-    create_item("Slovenské TV", f"{BASE_URL}?action=list_sk", is_folder=True)
-    create_item("České TV", f"{BASE_URL}?action=list_cz", is_folder=False)
+    # Slovenské TV
+    sk_item = xbmcgui.ListItem(label="Slovenské TV")
+    sk_url = BASE_URL + "?action=list_sk"
+    xbmcplugin.addDirectoryItem(handle=HANDLE, url=sk_url, listitem=sk_item, isFolder=True)
+    
+    # České TV
+    cz_item = xbmcgui.ListItem(label="České TV")
+    cz_url = BASE_URL + "?action=list_cz"
+    xbmcplugin.addDirectoryItem(handle=HANDLE, url=cz_url, listitem=cz_item, isFolder=False)
+    
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_tv():
-    """Zoznam slovenských staníc."""
-    # TV JOJ Stream
-    joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
+    # Tvoj funkčný M3U8 odkaz na JOJ
+    joj_m3u8 = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     
-    # Pridanie hlavičiek (User-Agent a Referer sú pre JOJ kľúčové)
-    headers = "|User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36&Referer=https://www.joj.sk/"
-    full_url = joj_url + headers
+    # Pridanie hlavičiek, ktoré server JOJ nutne vyžaduje (inak sa nespustí)
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    referer = "https://www.joj.sk/"
+    full_url = joj_m3u8 + "|User-Agent=" + user_agent + "&Referer=" + referer
     
-    # Logo z YouTube (priamy odkaz)
-    joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
+    # Vytvorenie položky TV JOJ
+    joj_item = xbmcgui.ListItem(label="TV JOJ")
     
-    create_item("TV JOJ", full_url, is_folder=False, icon=joj_logo, is_playable=True)
+    # Logo z tvojho odkazu
+    joj_logo = "https://upload.wikimedia.org/wikipedia/commons/e/ee/Logo_TV_JOJ_-_2020.svg"
+    joj_item.setArt({'icon': joj_logo, 'thumb': joj_logo})
+    
+    # Nastavenie vlastností pre prehrávač
+    joj_item.setInfo('video', {'title': 'TV JOJ'})
+    joj_item.setProperty('IsPlayable', 'true')
+    
+    # Vynútenie InputStream Adaptive (pre stabilný m3u8)
+    joj_item.setProperty('inputstream', 'inputstream.adaptive')
+    joj_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+    
+    xbmcplugin.addDirectoryItem(handle=HANDLE, url=full_url, listitem=joj_item, isFolder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
-def show_cz_announcement():
-    """Upozornenie pre České TV - Opravené zobrazenie."""
+def show_cz_msg():
+    # Okno, ktoré sa zobrazí po kliknutí na České TV
     dialog = xbmcgui.Dialog()
-    # Použijeme okno OK, ktoré sa musí potvrdiť, aby si ho videl
     dialog.ok("TV Free", "Pripravujeme čoskoro!")
-    # Po potvrdení obnovíme hlavné menu
-    main_menu()
 
-# --- ROUTER (SMEROVANIE) ---
-params = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
+# --- ROUTER (Logika prepínania) ---
+query = sys.argv[2][1:]
+params = dict(urllib.parse.parse_qsl(query))
 action = params.get('action')
 
 if action == 'list_sk':
     list_slovak_tv()
 elif action == 'list_cz':
-    show_cz_announcement()
+    show_cz_msg()
 else:
     main_menu()
     
