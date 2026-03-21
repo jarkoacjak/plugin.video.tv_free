@@ -15,10 +15,9 @@ def create_item(label, url, icon=None, folder=False, playable=False):
     if playable:
         list_item.setProperty('IsPlayable', 'true')
         list_item.setInfo('video', {'title': label})
-        # AKTIVÁCIA PREHRÁVAČA (Toto je kľúčové pre m3u8)
+        # AKTIVÁCIA PREHRÁVAČA - kľúč k m3u8
         list_item.setProperty('inputstream', 'inputstream.adaptive')
         list_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
-        list_item.setProperty('inputstream.adaptive.m3u8_max_bw', '20000000')
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=folder)
 
@@ -28,9 +27,9 @@ def main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_tv():
-    # HLAVA: Kompletná sada hlavičiek pre JOJ (bez nich to zlyhá)
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    headers = f"|User-Agent={ua}&Referer=https://www.joj.sk/&Origin=https://www.joj.sk&Connection=keep-alive"
+    # Zjednodušený User-Agent
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Safari/537.36"
+    headers = f"|User-Agent={ua}"
 
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8" + headers
