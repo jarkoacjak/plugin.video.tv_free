@@ -3,7 +3,7 @@ import urllib.parse
 import xbmcgui
 import xbmcplugin
 
-# Nastavenia Kodi
+# Nastavenia doplnku
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
@@ -15,9 +15,10 @@ def create_item(label, url, icon=None, folder=False, playable=False):
     if playable:
         list_item.setProperty('IsPlayable', 'true')
         list_item.setInfo('video', {'title': label})
-        # AKTIVÁCIA PREHRÁVAČA - kľúč k m3u8
+        # AKTIVÁCIA PREHRÁVAČA (Toto musí byť v kóde!)
         list_item.setProperty('inputstream', 'inputstream.adaptive')
         list_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        list_item.setProperty('inputstream.adaptive.stream_selection_type', '0')
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=folder)
 
@@ -27,9 +28,9 @@ def main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_tv():
-    # Zjednodušený User-Agent
+    # Hlavička (User-Agent), aby si server myslel, že si prehliadač
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Safari/537.36"
-    headers = f"|User-Agent={ua}"
+    headers = f"|User-Agent={ua}&Referer=https://www.joj.sk/"
 
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8" + headers
@@ -46,7 +47,7 @@ def list_slovak_tv():
 def show_cz_msg():
     xbmcgui.Dialog().ok("TV Free", "Pripravujeme čoskoro!")
 
-# ROUTER
+# Router
 params = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
 action = params.get('action')
 
