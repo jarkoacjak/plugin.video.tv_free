@@ -33,15 +33,15 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane JOJ Plus."""
+    """Zoznam slovenských staníc vrátane Jojko."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
     add_directory_item("TV JOJ", "play", icon=joj_logo, is_folder=False, video_url=joj_url)
 
-    # JOJ PLUS - Nová stanica
+    # JOJ PLUS
     plus_url = "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"
-    plus_logo = "https://i.ibb.co/21Xx2nnd/joj-plus.png" # Upravený priamy odkaz na logo
+    plus_logo = "https://i.ibb.co/21Xx2nnd/joj-plus.png"
     add_directory_item("JOJ Plus", "play", icon=plus_logo, is_folder=False, video_url=plus_url)
 
     # JOJ KRIMI
@@ -58,6 +58,11 @@ def list_slovak_channels():
     jojsport_url = "https://live.cdn.joj.sk/live/andromeda/joj_sport-1080.m3u8"
     jojsport_logo = "https://img.joj.sk/rx660n/662097da-11c1-434a-a923-3e00cdcb81e7"
     add_directory_item("JOJ Šport", "play", icon=jojsport_logo, is_folder=False, video_url=jojsport_url)
+
+    # JOJKO - Nová stanica
+    jojko_url = "https://live.cdn.joj.sk/live/andromeda/jojko-1080.m3u8"
+    jojko_logo = "https://i.ibb.co/TxFWhc1J/jojko.png"
+    add_directory_item("Jojko", "play", icon=jojko_logo, is_folder=False, video_url=jojko_url)
 
     # SENZI TV
     senzi_url = "https://lb.streaming.sk/senzi/stream/playlist.m3u8"
