@@ -74,15 +74,20 @@ def list_slovak_channels():
     cinema_logo = "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png"
     add_directory_item("JOJ Cinema", "play", icon=cinema_logo, is_folder=False, video_url=cinema_url)
 
-    # CS HISTORY - Aktualizované logo
+    # CS HISTORY
     cshist_url = "https://live.cdn.joj.sk/live/andromeda/cs_history-1080.m3u8"
     cshist_logo = "https://img.joj.sk/418430b1-b598-40d1-8552-39b473c73836"
     add_directory_item("CS History", "play", icon=cshist_logo, is_folder=False, video_url=cshist_url)
 
-    # CS FILM - Nová stanica
+    # CS FILM
     csfilm_url = "https://live.cdn.joj.sk/live/andromeda/cs_film-1080.m3u8"
     csfilm_logo = "https://staticeu.sweet.tv/images/cache/channel_icons/BCTQOIAK/935-cs-film-hd.png"
     add_directory_item("CS Film", "play", icon=csfilm_logo, is_folder=False, video_url=csfilm_url)
+
+    # CS MYSTERY - Nová stanica
+    csmystery_url = "https://live.cdn.joj.sk/live/andromeda/cs_mystery-1080.m3u8"
+    csmystery_logo = "https://www.jojgroup.sk/wp-content/uploads/CS-mistery.png"
+    add_directory_item("CS Mystery", "play", icon=csmystery_logo, is_folder=False, video_url=csmystery_url)
 
     # PRIMA LOVE
     love_url = "http://88.212.15.19/live/prima_love_avc_25p/playlist.m3u8"
