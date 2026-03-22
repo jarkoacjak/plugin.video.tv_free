@@ -33,7 +33,7 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane CS History."""
+    """Zoznam slovenských staníc vrátane CS balíka."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
@@ -74,10 +74,15 @@ def list_slovak_channels():
     cinema_logo = "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png"
     add_directory_item("JOJ Cinema", "play", icon=cinema_logo, is_folder=False, video_url=cinema_url)
 
-    # CS HISTORY - Nová stanica
+    # CS HISTORY - Aktualizované logo
     cshist_url = "https://live.cdn.joj.sk/live/andromeda/cs_history-1080.m3u8"
-    cshist_logo = "https://staticeu.sweet.tv/images/cache/channel_icons/BCTQOIAK/935-cs-film-hd.png"
+    cshist_logo = "https://img.joj.sk/418430b1-b598-40d1-8552-39b473c73836"
     add_directory_item("CS History", "play", icon=cshist_logo, is_folder=False, video_url=cshist_url)
+
+    # CS FILM - Nová stanica
+    csfilm_url = "https://live.cdn.joj.sk/live/andromeda/cs_film-1080.m3u8"
+    csfilm_logo = "https://staticeu.sweet.tv/images/cache/channel_icons/BCTQOIAK/935-cs-film-hd.png"
+    add_directory_item("CS Film", "play", icon=csfilm_logo, is_folder=False, video_url=csfilm_url)
 
     # PRIMA LOVE
     love_url = "http://88.212.15.19/live/prima_love_avc_25p/playlist.m3u8"
