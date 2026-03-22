@@ -33,7 +33,7 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane TV Nitrička."""
+    """Zoznam slovenských staníc vrátane TV9."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
@@ -89,10 +89,15 @@ def list_slovak_channels():
     liptov_logo = "https://yt3.googleusercontent.com/JJ6maA0dhvLU3z45Jhbgcc1brVZQswuPfYS6Da-Gli4MxXEPlhz5yuLkJlp7VL7mG7eSIxBORA=s900-c-k-c0x00ffffff-no-rj"
     add_directory_item("TV Liptov", "play", icon=liptov_logo, is_folder=False, video_url=liptov_url)
 
-    # TV NITRIČKA - Nová stanica
+    # TV NITRIČKA
     nitricka_url = "https://dash4.antik.sk/live/test_nitricka/playlist.m3u8"
     nitricka_logo = "https://www.satelitnatv.sk/wp-content/uploads/2013/04/nitricka.jpg"
     add_directory_item("TV Nitrička", "play", icon=nitricka_logo, is_folder=False, video_url=nitricka_url)
+
+    # TV9 - Nová stanica
+    tv9_url = "https://dash4.antik.sk/live/test_tv9/playlist.m3u8"
+    tv9_logo = "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg"
+    add_directory_item("TV9", "play", icon=tv9_url, is_folder=False, video_url=tv9_url)
 
     # SENZI TV
     senzi_url = "https://lb.streaming.sk/senzi/stream/playlist.m3u8"
@@ -131,4 +136,4 @@ if __name__ == '__main__':
         play_video(params.get('url'), params.get('title'))
     else:
         show_main_menu()
-    
+        
