@@ -33,7 +33,7 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane TV9."""
+    """Zoznam slovenských staníc vrátane TV8."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
@@ -94,10 +94,15 @@ def list_slovak_channels():
     nitricka_logo = "https://www.satelitnatv.sk/wp-content/uploads/2013/04/nitricka.jpg"
     add_directory_item("TV Nitrička", "play", icon=nitricka_logo, is_folder=False, video_url=nitricka_url)
 
-    # TV9 - Nová stanica
+    # TV9
     tv9_url = "https://dash4.antik.sk/live/test_tv9/playlist.m3u8"
     tv9_logo = "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg"
-    add_directory_item("TV9", "play", icon=tv9_url, is_folder=False, video_url=tv9_url)
+    add_directory_item("TV9", "play", icon=tv9_logo, is_folder=False, video_url=tv9_url)
+
+    # TV8 - Nová stanica
+    tv8_url = "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"
+    tv8_logo = "https://dam.nmhmedia.sk/image/b2a69f8a-d794-42f0-a5d2-18c4a8a6cb68_dam-url0zdqdn.png"
+    add_directory_item("TV8", "play", icon=tv8_logo, is_folder=False, video_url=tv8_url)
 
     # SENZI TV
     senzi_url = "https://lb.streaming.sk/senzi/stream/playlist.m3u8"
