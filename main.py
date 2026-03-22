@@ -33,7 +33,7 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane JOJ Family."""
+    """Zoznam slovenských staníc vrátane JOJ Cinema."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
@@ -64,10 +64,15 @@ def list_slovak_channels():
     jojko_logo = "https://i.ibb.co/TxFWhc1J/jojko.png"
     add_directory_item("Jojko", "play", icon=jojko_logo, is_folder=False, video_url=jojko_url)
 
-    # JOJ FAMILY - Nová stanica
+    # JOJ FAMILY
     family_url = "https://live.cdn.joj.sk/live/andromeda/family-1080.m3u8"
     family_logo = "https://i.ibb.co/hJgjKqpF/joj-family.png"
     add_directory_item("JOJ Family", "play", icon=family_logo, is_folder=False, video_url=family_url)
+
+    # JOJ CINEMA - Nová stanica
+    cinema_url = "https://live.cdn.joj.sk/live/andromeda/cinema-1080.m3u8"
+    cinema_logo = "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png"
+    add_directory_item("JOJ Cinema", "play", icon=cinema_logo, is_folder=False, video_url=cinema_url)
 
     # SENZI TV
     senzi_url = "https://lb.streaming.sk/senzi/stream/playlist.m3u8"
