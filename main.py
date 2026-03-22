@@ -33,7 +33,7 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane TV8."""
+    """Zoznam slovenských staníc vrátane CS History."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
@@ -74,6 +74,11 @@ def list_slovak_channels():
     cinema_logo = "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png"
     add_directory_item("JOJ Cinema", "play", icon=cinema_logo, is_folder=False, video_url=cinema_url)
 
+    # CS HISTORY - Nová stanica
+    cshist_url = "https://live.cdn.joj.sk/live/andromeda/cs_history-1080.m3u8"
+    cshist_logo = "https://staticeu.sweet.tv/images/cache/channel_icons/BCTQOIAK/935-cs-film-hd.png"
+    add_directory_item("CS History", "play", icon=cshist_logo, is_folder=False, video_url=cshist_url)
+
     # PRIMA LOVE
     love_url = "http://88.212.15.19/live/prima_love_avc_25p/playlist.m3u8"
     love_logo = "https://www.recenzer.cz/wp-content/uploads/2023/10/prima-love-logo.jpg"
@@ -99,7 +104,7 @@ def list_slovak_channels():
     tv9_logo = "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg"
     add_directory_item("TV9", "play", icon=tv9_logo, is_folder=False, video_url=tv9_url)
 
-    # TV8 - Nová stanica
+    # TV8
     tv8_url = "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"
     tv8_logo = "https://dam.nmhmedia.sk/image/b2a69f8a-d794-42f0-a5d2-18c4a8a6cb68_dam-url0zdqdn.png"
     add_directory_item("TV8", "play", icon=tv8_logo, is_folder=False, video_url=tv8_url)
@@ -116,7 +121,6 @@ def play_video(stream_url, title):
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     referer = "https://www.joj.sk/"
     
-    # Formát pre základný prehrávač Kodi
     final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
     
     list_item = xbmcgui.ListItem(path=final_url)
