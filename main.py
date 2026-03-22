@@ -3,7 +3,7 @@ import urllib.parse
 import xbmcgui
 import xbmcplugin
 
-# --- Základné nastavenia Kodi ---
+# --- Základné nastavenia Kodi (Kód v angličtine, Menu v slovenčine) ---
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
@@ -27,14 +27,14 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None)
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
 def show_main_menu():
-    """Hlavné menu."""
+    """Hlavné menu doplnku."""
     add_directory_item("Slovenské TV", "list_sk", is_folder=True)
     add_directory_item("České TV", "list_cz", is_folder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc s opravenými logami."""
-    # TV JOJ - Opravené logo
+    """Zoznam slovenských staníc vrátane JOJ Šport."""
+    # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
     add_directory_item("TV JOJ", "play", icon=joj_logo, is_folder=False, video_url=joj_url)
@@ -44,10 +44,15 @@ def list_slovak_channels():
     krimi_logo = "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png"
     add_directory_item("JOJ Krimi", "play", icon=krimi_logo, is_folder=False, video_url=krimi_url)
 
-    # JOJ 24 - Nová stanica
+    # JOJ 24
     joj24_url = "https://live.cdn.joj.sk/live/andromeda/joj_news-1080.m3u8"
     joj24_logo = "https://img.joj.sk/38a52c95-84ce-4c04-b70a-2289a9fd1541"
     add_directory_item("JOJ 24", "play", icon=joj24_logo, is_folder=False, video_url=joj24_url)
+
+    # JOJ ŠPORT - Nová stanica
+    jojsport_url = "https://live.cdn.joj.sk/live/andromeda/joj_sport-1080.m3u8"
+    jojsport_logo = "https://img.joj.sk/rx660n/662097da-11c1-434a-a923-3e00cdcb81e7"
+    add_directory_item("JOJ Šport", "play", icon=jojsport_logo, is_folder=False, video_url=jojsport_url)
 
     # SENZI TV
     senzi_url = "https://lb.streaming.sk/senzi/stream/playlist.m3u8"
@@ -57,11 +62,11 @@ def list_slovak_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    """Spustí video pomocou vstavaného prehrávača Kodi s hlavičkami."""
+    """Spustí video s hlavičkami Chrome."""
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     referer = "https://www.joj.sk/"
     
-    # Spájame odkaz a hlavičky pre základný prehrávač
+    # Formát pre základný prehrávač Kodi
     final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
     
     list_item = xbmcgui.ListItem(path=final_url)
@@ -70,7 +75,7 @@ def play_video(stream_url, title):
     xbmcplugin.setResolvedUrl(HANDLE, True, list_item)
 
 def show_czech_notice():
-    """Dialog pre České TV."""
+    """Oznam pre České TV."""
     xbmcgui.Dialog().ok("TV Free", "Pripravujeme Čoskoro")
 
 # --- Router ---
