@@ -3,12 +3,12 @@ import urllib.parse
 import xbmcgui
 import xbmcplugin
 
-# --- Základné nastavenia Kodi (Kód v angličtine, Menu v slovenčine) ---
+# --- Configuration (Kodi Engine) ---
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None):
-    """Vytvorí položku v menu Kodi."""
+    """Vytvorí položku v menu Kodi. Názvy sú po slovensky."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -33,11 +33,16 @@ def show_main_menu():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane JOJ Šport."""
+    """Zoznam slovenských staníc vrátane JOJ Plus."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
     add_directory_item("TV JOJ", "play", icon=joj_logo, is_folder=False, video_url=joj_url)
+
+    # JOJ PLUS - Nová stanica
+    plus_url = "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"
+    plus_logo = "https://i.ibb.co/21Xx2nnd/joj-plus.png" # Upravený priamy odkaz na logo
+    add_directory_item("JOJ Plus", "play", icon=plus_logo, is_folder=False, video_url=plus_url)
 
     # JOJ KRIMI
     krimi_url = "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"
@@ -49,7 +54,7 @@ def list_slovak_channels():
     joj24_logo = "https://img.joj.sk/38a52c95-84ce-4c04-b70a-2289a9fd1541"
     add_directory_item("JOJ 24", "play", icon=joj24_logo, is_folder=False, video_url=joj24_url)
 
-    # JOJ ŠPORT - Nová stanica
+    # JOJ ŠPORT
     jojsport_url = "https://live.cdn.joj.sk/live/andromeda/joj_sport-1080.m3u8"
     jojsport_logo = "https://img.joj.sk/rx660n/662097da-11c1-434a-a923-3e00cdcb81e7"
     add_directory_item("JOJ Šport", "play", icon=jojsport_logo, is_folder=False, video_url=jojsport_url)
@@ -62,7 +67,7 @@ def list_slovak_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    """Spustí video s hlavičkami Chrome."""
+    """Spustí video so simuláciou prehliadača Chrome."""
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     referer = "https://www.joj.sk/"
     
@@ -75,7 +80,7 @@ def play_video(stream_url, title):
     xbmcplugin.setResolvedUrl(HANDLE, True, list_item)
 
 def show_czech_notice():
-    """Oznam pre České TV."""
+    """Dialog pre České TV."""
     xbmcgui.Dialog().ok("TV Free", "Pripravujeme Čoskoro")
 
 # --- Router ---
