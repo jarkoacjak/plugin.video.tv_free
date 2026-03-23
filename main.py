@@ -99,7 +99,7 @@ def list_slovak_channels():
     lux_logo = "https://213.sk/wp-content/uploads/2020/11/tvlux.jpg"
     add_directory_item("TV LUX", "play", icon=lux_logo, is_folder=False, video_url=lux_url)
 
-    # TV LIPTOV - OPRAVENÉ LOGO
+    # TV LIPTOV
     liptov_url = "http://95.105.255.137:1935/tvturiec/tvliptov.stream/playlist.m3u8"
     liptov_logo = "https://yt3.googleusercontent.com/JJ6maA0dhvLU3z45Jhbgcc1brVZQswuPfYS6Da-Gli4MxXEPlhz5yuLkJlp7VL7mG7eSIxBORA=s900-c-k-c0x00ffffff-no-rj"
     add_directory_item("TV Liptov", "play", icon=liptov_logo, is_folder=False, video_url=liptov_url)
@@ -114,10 +114,10 @@ def list_slovak_channels():
     tv9_logo = "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg"
     add_directory_item("TV9", "play", icon=tv9_logo, is_folder=False, video_url=tv9_url)
 
-    # TV8
+    # TV 8 - OPRAVENÉ LOGO
     tv8_url = "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"
-    tv8_logo = "https://dam.nmhmedia.sk/image/b2a69f8a-d794-42f0-a5d2-18c4a8a6cb68_dam-url0zdqdn.png"
-    add_directory_item("TV8", "play", icon=tv8_logo, is_folder=False, video_url=tv8_url)
+    tv8_logo = "https://www.digislovakia.sk/wp-content/uploads/2023/04/TV8-logo-2-300x231.png"
+    add_directory_item("TV 8", "play", icon=tv8_logo, is_folder=False, video_url=tv8_url)
 
     # SENZI TV
     senzi_url = "https://lb.streaming.sk/senzi/stream/playlist.m3u8"
