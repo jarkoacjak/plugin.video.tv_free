@@ -29,11 +29,11 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None)
 def show_main_menu():
     """Hlavné menu doplnku."""
     add_directory_item("Slovenské TV", "list_sk", is_folder=True)
-    add_directory_item("České TV", "list_cz", is_folder=False)
+    add_directory_item("České TV", "list_cz", is_folder=True) # Zmenené na True
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc vrátane CS balíka."""
+    """Zoznam slovenských staníc."""
     # TV JOJ
     joj_url = "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"
     joj_logo = "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj"
@@ -84,7 +84,7 @@ def list_slovak_channels():
     csfilm_logo = "https://staticeu.sweet.tv/images/cache/channel_icons/BCTQOIAK/935-cs-film-hd.png"
     add_directory_item("CS Film", "play", icon=csfilm_logo, is_folder=False, video_url=csfilm_url)
 
-    # CS MYSTERY - Nová stanica
+    # CS MYSTERY
     csmystery_url = "https://live.cdn.joj.sk/live/andromeda/cs_mystery-1080.m3u8"
     csmystery_logo = "https://www.jojgroup.sk/wp-content/uploads/CS-mistery.png"
     add_directory_item("CS Mystery", "play", icon=csmystery_logo, is_folder=False, video_url=csmystery_url)
@@ -126,6 +126,15 @@ def list_slovak_channels():
 
     xbmcplugin.endOfDirectory(HANDLE)
 
+def list_czech_channels():
+    """Zoznam českých staníc."""
+    # Minimax - Nová stanica
+    minimax_url = "http://88.212.15.19/live/test_minimax/playlist.m3u8"
+    minimax_logo = "https://www.minimaxcz.tv/storage/images/cWiGhWyxj8fFnyWQZxEX.png"
+    add_directory_item("Minimax", "play", icon=minimax_logo, is_folder=False, video_url=minimax_url)
+    
+    xbmcplugin.endOfDirectory(HANDLE)
+
 def play_video(stream_url, title):
     """Spustí video so simuláciou prehliadača Chrome."""
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -138,10 +147,6 @@ def play_video(stream_url, title):
     
     xbmcplugin.setResolvedUrl(HANDLE, True, list_item)
 
-def show_czech_notice():
-    """Dialog pre České TV."""
-    xbmcgui.Dialog().ok("TV Free", "Pripravujeme Čoskoro")
-
 # --- Router ---
 if __name__ == '__main__':
     params = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
@@ -150,7 +155,7 @@ if __name__ == '__main__':
     if action == 'list_sk':
         list_slovak_channels()
     elif action == 'list_cz':
-        show_czech_notice()
+        list_czech_channels() # Zmenené na volanie funkcie
     elif action == 'play':
         play_video(params.get('url'), params.get('title'))
     else:
