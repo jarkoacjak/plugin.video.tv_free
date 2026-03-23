@@ -29,7 +29,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None)
 def show_main_menu():
     """Hlavné menu doplnku."""
     add_directory_item("Slovenské TV", "list_sk", is_folder=True)
-    add_directory_item("České TV", "list_cz", is_folder=True) # Zmenené na True
+    add_directory_item("České TV", "list_cz", is_folder=True)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
@@ -128,10 +128,15 @@ def list_slovak_channels():
 
 def list_czech_channels():
     """Zoznam českých staníc."""
-    # Minimax - Nová stanica
+    # Minimax
     minimax_url = "http://88.212.15.19/live/test_minimax/playlist.m3u8"
     minimax_logo = "https://www.minimaxcz.tv/storage/images/cWiGhWyxj8fFnyWQZxEX.png"
     add_directory_item("Minimax", "play", icon=minimax_logo, is_folder=False, video_url=minimax_url)
+
+    # Óčko - Nová stanica
+    ocko_url = "https://ocko-live-dash.ssl.cdn.cra.cz/cra_live2/ocko.stream.1.smil/playlist.m3u8"
+    ocko_logo = "https://parasite.cz/wp-content/uploads/2013/02/ocko1.jpg"
+    add_directory_item("Óčko", "play", icon=ocko_logo, is_folder=False, video_url=ocko_url)
     
     xbmcplugin.endOfDirectory(HANDLE)
 
@@ -155,7 +160,7 @@ if __name__ == '__main__':
     if action == 'list_sk':
         list_slovak_channels()
     elif action == 'list_cz':
-        list_czech_channels() # Zmenené na volanie funkcie
+        list_czech_channels()
     elif action == 'play':
         play_video(params.get('url'), params.get('title'))
     else:
