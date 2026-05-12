@@ -1,14 +1,22 @@
-<addon id="plugin.video.tvfree" name="Tv free" version="1.0.0" provider-name="Jarko">
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.tvfree" name="TV Free" version="1.0.0" provider-name="Jarko">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
+        <import addon="script.module.requests" version="2.25.1"/>
     </requires>
-    <extension point="xbmc.python.pluginsource" library="default.py">
+    <extension point="xbmc.python.pluginsource" library="main.py">
         <provides>video</provides>
     </extension>
     <extension point="xbmc.addon.metadata">
-        <summary>Televízia zadarmo</summary>
+        <summary lang="sk">Sledovanie slovenských a českých TV staníc zadarmo.</summary>
+        <description lang="sk">Doplnok TV Free umožňuje sledovať živé vysielanie vybraných staníc a generovať playlist pre PVR klienta.</description>
+        <disclaimer lang="sk">Tento doplnok slúži len na testovacie účely. Autor nezodpovedá za obsah streamov.</disclaimer>
+        <language>sk</language>
         <platform>all</platform>
-        <datadir zip="true">https://jarkoacjak.github.io/jaroacjak-sk-repo/plugin.video.tvfree/plugin.video.tvfree-1.0.0.zip</datadir>
+        <license>GPL-2.0-only</license>
+        <assets>
+            <icon>icon.png</icon>
+            <fanart>fanart.jpg</fanart>
+        </assets>
     </extension>
 </addon>
-
