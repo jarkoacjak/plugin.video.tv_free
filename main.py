@@ -1,6 +1,7 @@
 import sys
 import os
 import urllib.parse
+import datetime
 import xbmc
 import xbmcgui
 import xbmcplugin
@@ -10,14 +11,14 @@ import xbmcvfs
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-# Cesta k dátam doplnku tv_free, kam uložíme vygenerovaný playlist
+# Cesta k dátam doplnku tv_free, kam uložíme vygenerovaný playlist a epg
 ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.video.tv_free/")
 
 if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id=""):
-    """Vytvorí položku v menu Kodi a priradí jej EPG značku pre IPTV Simple Client."""
+    """Vytvorí položku v menu Kodi a priradí jej EPG značku."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -32,13 +33,12 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     if not is_folder:
         list_item.setProperty('IsPlayable', 'true')
         list_item.setInfo('video', {'title': label})
-        # Tieto ID posielame do playlistu a Kodi ich spáruje s profi EPG v IPTV Simple Clientovi
         list_item.setProperty('tvg-id', tvg_id)
         list_item.setProperty('tvg-logo', icon)
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
-# --- ZOZNAMY STANÍC (Štandardné EPG ID pre PVR klientov) ---
+# --- ZOZNAMY STANÍC (Meno, Ikona, EPG ID, Stream URL) ---
 CHANNELS_SK = [
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
@@ -69,10 +69,10 @@ CHANNELS_CZ = [
     ("ČT Sport", "https://www.itelka.sk/wp-content/uploads/2023/04/ct-sport.png", "CTSport.cz", "http://88.212.15.19/live/test_ctsport_25p/playlist.m3u8")
 ]
 
-# --- FUNKCIE PRE GENERÁCIU PLAYLISTU ---
+# --- GENERÁTORY PRE PVR KLIENTA ---
 
 def generate_pvr_playlist():
-    """Vygeneruje .m3u súbor pre IPTV Simple Client."""
+    """Vygeneruje .m3u súbor s lokálnou cestou pre IPTV Simple Client."""
     m3u_path = os.path.join(ADDON_DATA_PATH, "playlist.m3u")
     try:
         with open(m3u_path, "w", encoding="utf-8") as f:
@@ -80,9 +80,39 @@ def generate_pvr_playlist():
             all_channels = CHANNELS_SK + CHANNELS_CZ
             for name, logo, tid, url in all_channels:
                 f.write(f'#EXTINF:-1 tvg-id="{tid}" tvg-logo="{logo}",{name}\n{url}\n')
-        xbmcgui.Dialog().ok("PVR Playlist", f"Playlist úspešne vytvorený!\nCesta: {m3u_path}\n\nTeraz túto lokálnu cestu nastav v IPTV Simple Client.")
+        xbmcgui.Dialog().ok("PVR Playlist", f"Playlist vytvorený!\nCesta: {m3u_path}")
     except Exception as e:
-        xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie: {str(e)}")
+        xbmcgui.Dialog().error("Chyba", str(e))
+
+def generate_pvr_epg():
+    """Generuje epg.xml priamo v doplnku a plní ho automatickým časovým programom."""
+    epg_path = os.path.join(ADDON_DATA_PATH, "epg.xml")
+    try:
+        now = datetime.datetime.now()
+        start_time = now.strftime("%Y%m%d000000 +0200")
+        stop_time = (now + datetime.timedelta(days=1)).strftime("%Y%m%d235900 +0200")
+        
+        all_channels = CHANNELS_SK + CHANNELS_CZ
+        
+        with open(epg_path, "w", encoding="utf-8") as f:
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n')
+            
+            # Zapísanie kanálov
+            for name, _, tid, _ in all_channels:
+                f.write(f'  <channel id="{tid}"><display-name>{name}</display-name></channel>\n')
+            
+            # Zapísanie automatických programov (aby IPTV klient videl, dokedy bežia)
+            for name, _, tid, _ in all_channels:
+                f.write(f'  <programme start="{start_time}" stop="{stop_time}" channel="{tid}">\n')
+                f.write(f'    <title>{name} - Živé vysielanie</title>\n')
+                f.write(f'    <desc>Práve sledujete živé vysielanie stanice {name}.</desc>\n')
+                f.write('  </programme>\n')
+                
+            f.write('</tv>\n')
+            
+        xbmcgui.Dialog().ok("PVR EPG", f"EPG sprievodca bol vygenerovaný!\nCesta: {epg_path}\n\nTeraz túto cestu nastav v IPTV Simple Clientovi.")
+    except Exception as e:
+        xbmcgui.Dialog().error("Chyba EPG", str(e))
 
 # --- MENU STRUKTÚRA ---
 
@@ -90,6 +120,7 @@ def show_main_menu():
     """Hlavné menu doplnku."""
     add_directory_item("Živé vysielania", "live_menu", is_folder=True)
     add_directory_item("Nastaviť playlist do PVR IPTV Simple Client priamo z pluginu", "set_pvr_playlist", is_folder=False)
+    add_directory_item("Nastaviť generované epg do PVR IPTV Simple Client", "set_pvr_epg", is_folder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def show_live_menu():
@@ -111,7 +142,7 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    """Spustí video v Kodi prehrávači s potrebnými hlavičkami."""
+    """Spustí video."""
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     referer = "https://www.joj.sk/"
     final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
@@ -133,6 +164,8 @@ if __name__ == '__main__':
         play_video(params.get('url'), params.get('title'))
     elif action == 'set_pvr_playlist':
         generate_pvr_playlist()
+    elif action == 'set_pvr_epg':
+        generate_pvr_epg()
     else:
         show_main_menu()
-    
+        
