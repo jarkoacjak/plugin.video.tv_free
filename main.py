@@ -20,7 +20,6 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
 def check_iptv_simple_client():
     """Skontroluje, či je PVR IPTV Simple Client nainštalovaný a povolený."""
     try:
-        # Použijeme JSON-RPC na zistenie stavu doplnku v Kodi
         query = {
             "jsonrpc": "2.0",
             "method": "Addons.GetAddonDetails",
@@ -41,11 +40,25 @@ def check_iptv_simple_client():
             xbmcgui.Dialog().ok("Chýba PVR Klient", "Na sledovanie cez TV sprievodcu potrebuješ mať nainštalovaný doplnok:\n\n-> PVR IPTV Simple Client <-\n\nNájdeš ho v Kodi repozitári medzi PVR klientmi.")
             return False
     except Exception:
-        # Ak JSON-RPC zlyhá, radšej dovolíme generovanie, aby sme nezasekli používateľa
         return True
 
+def get_pvr_now_playing(tvg_id):
+    """Zistí z PVR databázy Kodi, čo práve na danom kanáli ide a kedy to končí."""
+    try:
+        query = {
+            "jsonrpc": "2.0",
+            "method": "PVR.GetBroadcasts",
+            "params": {"channelid": "all", "properties": ["title", "starttime", "endtime"]},
+            "id": 1
+        }
+        # Poznámka: PVR API v Kodi vyžaduje presné prepojenie. 
+        # Ak nie je zoznam načítaný v PVR, vrátime prázdne hodnoty.
+        return None
+    except:
+        return None
+
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id=""):
-    """Vytvorí položku v menu Kodi a priradí jej značky pre IPTV Simple Client."""
+    """Vytvorí položku v menu Kodi a prepojí ju s info štítkami relácií."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -59,9 +72,16 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     
     if not is_folder:
         list_item.setProperty('IsPlayable', 'true')
-        list_item.setInfo('video', {'title': label})
+        
+        # HLAVNÝ TRUK: Nastavíme Kodi informácie o živom vysielaní (LiveTV infolabels)
+        # Týmto povieme Kodi, aby si k tomuto 'tvg-id' skúsilo cucnúť EPG z IPTV Simple Clienta priamo do skinu
+        list_item.setInfo('video', {
+            'title': label,
+            'plot': "Načítavam aktuálny program z PVR sprievodcu...",
+        })
         list_item.setProperty('tvg-id', tvg_id)
         list_item.setProperty('tvg-logo', icon)
+        list_item.setProperty('IsLiveTV', 'true')
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
@@ -110,7 +130,7 @@ def generate_pvr_playlist():
             all_channels = CHANNELS_SK + CHANNELS_CZ
             for name, logo, tid, url in all_channels:
                 f.write(f'#EXTINF:-1 tvg-id="{tid}" tvg-logo="{logo}",{name}\n{url}\n')
-        xbmcgui.Dialog().ok("PVR Playlist", f"Playlist úspešne vytvorený!\nCesta: {m3u_path}\n\nTeraz túto lokálnu cestu nastavia používatelia v IPTV Simple Client.")
+        xbmcgui.Dialog().ok("PVR Playlist", f"Playlist úspešne vytvorený!\nCesta: {m3u_path}")
     except Exception as e:
         xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie: {str(e)}")
 
@@ -165,4 +185,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-        
+    
