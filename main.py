@@ -1,24 +1,51 @@
 import sys
 import os
 import urllib.parse
-import datetime
 import xbmc
 import xbmcgui
 import xbmcplugin
 import xbmcvfs
+import json
 
 # --- Configuration (Kodi Engine) ---
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-# Cesta k dátam doplnku tv_free, kam uložíme vygenerovaný playlist a epg
+# Cesta k dátam doplnku tv_free, kam uložíme vygenerovaný playlist
 ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.video.tv_free/")
 
 if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
+def check_iptv_simple_client():
+    """Skontroluje, či je PVR IPTV Simple Client nainštalovaný a povolený."""
+    try:
+        # Použijeme JSON-RPC na zistenie stavu doplnku v Kodi
+        query = {
+            "jsonrpc": "2.0",
+            "method": "Addons.GetAddonDetails",
+            "params": {"addonid": "pvr.iptvsimple", "properties": ["enabled"]},
+            "id": 1
+        }
+        response = xbmc.executeJSONRPC(json.dumps(query))
+        result = json.loads(response)
+        
+        if "result" in result and "addon" in result["result"]:
+            addon_details = result["result"]["addon"]
+            if addon_details.get("enabled"):
+                return True
+            else:
+                xbmcgui.Dialog().ok("Upozornenie", "PVR IPTV Simple Client máš nainštalovaný, ale je zakázaný.\nProsím, povoľ ho v nastaveniach doplnkov Kodi.")
+                return False
+        else:
+            xbmcgui.Dialog().ok("Chýba PVR Klient", "Na sledovanie cez TV sprievodcu potrebuješ mať nainštalovaný doplnok:\n\n-> PVR IPTV Simple Client <-\n\nNájdeš ho v Kodi repozitári medzi PVR klientmi.")
+            return False
+    except Exception:
+        # Ak JSON-RPC zlyhá, radšej dovolíme generovanie, aby sme nezasekli používateľa
+        return True
+
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id=""):
-    """Vytvorí položku v menu Kodi a priradí jej EPG značku."""
+    """Vytvorí položku v menu Kodi a priradí jej značky pre IPTV Simple Client."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -69,10 +96,13 @@ CHANNELS_CZ = [
     ("ČT Sport", "https://www.itelka.sk/wp-content/uploads/2023/04/ct-sport.png", "CTSport.cz", "http://88.212.15.19/live/test_ctsport_25p/playlist.m3u8")
 ]
 
-# --- GENERÁTORY PRE PVR KLIENTA ---
+# --- FUNKCIA PRE GENERÁCIU PLAYLISTU ---
 
 def generate_pvr_playlist():
-    """Vygeneruje .m3u súbor s lokálnou cestou pre IPTV Simple Client."""
+    """Vygeneruje .m3u súbor len ak je nainštalovaný PVR klient."""
+    if not check_iptv_simple_client():
+        return
+
     m3u_path = os.path.join(ADDON_DATA_PATH, "playlist.m3u")
     try:
         with open(m3u_path, "w", encoding="utf-8") as f:
@@ -80,39 +110,9 @@ def generate_pvr_playlist():
             all_channels = CHANNELS_SK + CHANNELS_CZ
             for name, logo, tid, url in all_channels:
                 f.write(f'#EXTINF:-1 tvg-id="{tid}" tvg-logo="{logo}",{name}\n{url}\n')
-        xbmcgui.Dialog().ok("PVR Playlist", f"Playlist vytvorený!\nCesta: {m3u_path}")
+        xbmcgui.Dialog().ok("PVR Playlist", f"Playlist úspešne vytvorený!\nCesta: {m3u_path}\n\nTeraz túto lokálnu cestu nastavia používatelia v IPTV Simple Client.")
     except Exception as e:
-        xbmcgui.Dialog().error("Chyba", str(e))
-
-def generate_pvr_epg():
-    """Generuje epg.xml priamo v doplnku a plní ho automatickým časovým programom."""
-    epg_path = os.path.join(ADDON_DATA_PATH, "epg.xml")
-    try:
-        now = datetime.datetime.now()
-        start_time = now.strftime("%Y%m%d000000 +0200")
-        stop_time = (now + datetime.timedelta(days=1)).strftime("%Y%m%d235900 +0200")
-        
-        all_channels = CHANNELS_SK + CHANNELS_CZ
-        
-        with open(epg_path, "w", encoding="utf-8") as f:
-            f.write('<?xml version="1.0" encoding="UTF-8"?>\n<tv>\n')
-            
-            # Zapísanie kanálov
-            for name, _, tid, _ in all_channels:
-                f.write(f'  <channel id="{tid}"><display-name>{name}</display-name></channel>\n')
-            
-            # Zapísanie automatických programov (aby IPTV klient videl, dokedy bežia)
-            for name, _, tid, _ in all_channels:
-                f.write(f'  <programme start="{start_time}" stop="{stop_time}" channel="{tid}">\n')
-                f.write(f'    <title>{name} - Živé vysielanie</title>\n')
-                f.write(f'    <desc>Práve sledujete živé vysielanie stanice {name}.</desc>\n')
-                f.write('  </programme>\n')
-                
-            f.write('</tv>\n')
-            
-        xbmcgui.Dialog().ok("PVR EPG", f"EPG sprievodca bol vygenerovaný!\nCesta: {epg_path}\n\nTeraz túto cestu nastav v IPTV Simple Clientovi.")
-    except Exception as e:
-        xbmcgui.Dialog().error("Chyba EPG", str(e))
+        xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie: {str(e)}")
 
 # --- MENU STRUKTÚRA ---
 
@@ -120,7 +120,6 @@ def show_main_menu():
     """Hlavné menu doplnku."""
     add_directory_item("Živé vysielania", "live_menu", is_folder=True)
     add_directory_item("Nastaviť playlist do PVR IPTV Simple Client priamo z pluginu", "set_pvr_playlist", is_folder=False)
-    add_directory_item("Nastaviť generované epg do PVR IPTV Simple Client", "set_pvr_epg", is_folder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def show_live_menu():
@@ -142,7 +141,7 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    """Spustí video."""
+    """Spustí video v Kodi prehrávači s hlavičkami."""
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     referer = "https://www.joj.sk/"
     final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
@@ -164,8 +163,6 @@ if __name__ == '__main__':
         play_video(params.get('url'), params.get('title'))
     elif action == 'set_pvr_playlist':
         generate_pvr_playlist()
-    elif action == 'set_pvr_epg':
-        generate_pvr_epg()
     else:
         show_main_menu()
         
