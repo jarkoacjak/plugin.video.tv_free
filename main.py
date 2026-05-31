@@ -24,7 +24,6 @@ def clean_name(name):
     if not name:
         return ""
     name = name.lower()
-    # Odstráni koncovky, medzery, pomlčky a nepodstatné slová
     name = re.sub(r'\.sk|\.cz|tv|hd|sk|cz|\s+|-|_', '', name)
     return name
 
@@ -40,7 +39,7 @@ def download_and_decode(url):
             else:
                 return response.read().decode('utf-8', errors='ignore')
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmcvfs.LOGWARNING)
+        xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmc.LOGWARNING)
     return ""
 
 def parse_xmltv_timestamp(date_str, is_epg_pw=False):
@@ -67,10 +66,8 @@ def parse_xmltv_timestamp(date_str, is_epg_pw=False):
         elif len(date_str) >= 14:
             dt = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S")
             if is_epg_pw:
-                # epg.pw posiela lokálny stredoeurópsky čas, netreba ho prekladať cez UTC
                 return time.mktime(dt.timetuple())
             else:
-                # iptv-epg bez zóny berieme ako UTC
                 dt = dt.replace(tzinfo=timezone.utc)
                 return dt.timestamp()
             
@@ -82,11 +79,9 @@ def get_xmltv_epg():
     """Načíta program zo všetkých zdrojov a uloží ho pod zjednodušenými kľúčmi."""
     epg_dict = {}
     
-    # 1. Hlavné EPG zdroje
     xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
     xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
     
-    # 2. Dynamický dnešný dátum pre linky z epg.pw
     current_date = time.strftime("%Y%m%d", time.localtime())
     xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
     xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
@@ -110,12 +105,10 @@ def get_xmltv_epg():
                 end_time = time.strftime("%H:%M", time.localtime(stop_ts))
                 program_text = f"({start_time} - {end_time}) {clean_title}"
                 
-                # Uložíme pod surovým ID, malým ID a super-očisteným ID (napr. senzi, tvjoj, jojplus)
                 epg_dict[channel_id] = program_text
                 epg_dict[channel_id.lower()] = program_text
                 epg_dict[clean_name(channel_id)] = program_text
 
-    # Spracujeme osobitne JOJ Šport zdroje z epg.pw
     joj_sport_xml = xml_joj_sport + xml_joj_sport2
     if joj_sport_xml and "<programme" in joj_sport_xml:
         matches = re.findall(pattern, joj_sport_xml, re.DOTALL)
@@ -154,13 +147,11 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     if not is_folder:
         current_program = None
         if epg_dict:
-            # 1. Pokus: Hľadanie cez presné ID alebo jeho variácie
             current_program = (epg_dict.get(tvg_id) or 
                                epg_dict.get(tvg_id.lower()) or 
                                epg_dict.get(clean_name(tvg_id)) or 
                                epg_dict.get(clean_name(label)))
             
-            # 2. Pokus (Záloha): Ak sa nič nenašlo, prejdeme slovník a skúsime čiastočnú zhodu v očistených názvoch
             if not current_program:
                 clean_label_name = clean_name(label)
                 clean_tvg_id = clean_name(tvg_id)
@@ -281,4 +272,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-
+                                                      
