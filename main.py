@@ -76,7 +76,7 @@ def parse_xmltv_timestamp(date_str, is_epg_pw=False):
     return None
 
 def get_xmltv_epg():
-    """Načíta program zo všetkých zdrojov a uloží ho pod zjednodušenými kľúčmi."""
+    """Načíta program zo všetkých zdrojov a uloží ho pod presnými kľúčmi."""
     epg_dict = {}
     
     xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
@@ -105,10 +105,12 @@ def get_xmltv_epg():
                 end_time = time.strftime("%H:%M", time.localtime(stop_ts))
                 program_text = f"({start_time} - {end_time}) {clean_title}"
                 
+                # Ukladáme striktne pod ID z XML (napr. "Senzi.sk", "TVLux.sk" atď.)
                 epg_dict[channel_id] = program_text
                 epg_dict[channel_id.lower()] = program_text
                 epg_dict[clean_name(channel_id)] = program_text
 
+    # Spracujeme osobitne JOJ Šport zdroje z epg.pw
     joj_sport_xml = xml_joj_sport + xml_joj_sport2
     if joj_sport_xml and "<programme" in joj_sport_xml:
         matches = re.findall(pattern, joj_sport_xml, re.DOTALL)
@@ -126,15 +128,13 @@ def get_xmltv_epg():
                 
                 if channel_id == "410453":
                     epg_dict["JOJSport.sk"] = program_text
-                    epg_dict["jojsport"] = program_text
                 elif channel_id == "413189":
                     epg_dict["JOJSport2.sk"] = program_text
-                    epg_dict["jojsport2"] = program_text
 
     return epg_dict
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
-    """Pridá položku do zoznamu v Kodi s inteligentným záložným vyhľadávaním EPG."""
+    """Pridá položku do zoznamu v Kodi s bezpečným párovaním EPG."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -147,21 +147,18 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     if not is_folder:
         current_program = None
         if epg_dict:
+            # Presné hľadanie podľa nadefinovaného tvg-id
             current_program = (epg_dict.get(tvg_id) or 
                                epg_dict.get(tvg_id.lower()) or 
                                epg_dict.get(clean_name(tvg_id)) or 
                                epg_dict.get(clean_name(label)))
             
+            # Bezpečné alternatívne mapovanie pre špecifické stanice, ak ich zdroj pomenoval inak
             if not current_program:
-                clean_label_name = clean_name(label)
-                clean_tvg_id = clean_name(tvg_id)
-                for epg_key, epg_val in epg_dict.items():
-                    if clean_label_name and clean_label_name in epg_key:
-                        current_program = epg_val
-                        break
-                    if clean_tvg_id and clean_tvg_id in epg_key:
-                        current_program = epg_val
-                        break
+                if "senzi" in label.lower():
+                    current_program = epg_dict.get("senzi") or epg_dict.get("senzitz")
+                elif "lux" in label.lower():
+                    current_program = epg_dict.get("tvlux") or epg_dict.get("lux")
             
         if current_program:
             display_label = f"{label}  |  {current_program}"
@@ -272,4 +269,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-                                                      
+
