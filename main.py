@@ -90,7 +90,7 @@ def parse_xmltv_timestamp(date_str, is_epg_pw=False):
     return None
 
 def get_xmltv_epg():
-    """Načíta program zo všetkých zdrojov a uloží ho pod presnými XML ID kľúčmi s poistkou proti zlyhaniu."""
+    """Načíta kompletný program zo všetkých zdrojov ako predtým."""
     epg_dict = {}
     try:
         xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
@@ -139,7 +139,7 @@ def get_xmltv_epg():
                     elif channel_id == "413189":
                         epg_dict["jojsport2"] = program_text
     except Exception as e:
-        xbmc.log(f"[TV Free] Kritická chyba pri spracovaní EPG: {str(e)}", xbmc.LOGERROR)
+        xbmc.log(f"[TV Free] Chyba pri spracovaní EPG: {str(e)}", xbmc.LOGERROR)
         
     return epg_dict
 
@@ -251,15 +251,8 @@ def play_video(stream_url, title):
     
     list_item = xbmcgui.ListItem(path=final_url)
     list_item.setInfo('video', {'title': title})
-    
-    # HLS optimalizácia cez adaptive engine
-    list_item.setProperty('inputstream', 'inputstream.adaptive')
-    list_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
         
     xbmcplugin.setResolvedUrl(HANDLE, True, list_item)
-    
-    # KĽÚČOVÁ OPRAVA: Keď používateľ vypne stanicu a vráti sa, Kodi vynútene refreshne zoznam a znova bleskovo načíta funkčné EPG
-    xbmc.executebuiltin("Container.Refresh")
 
 if __name__ == '__main__':
     params = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
