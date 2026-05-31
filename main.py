@@ -48,19 +48,21 @@ MAP_EPG = {
     "CTSport.cz": ["CTSport.cz", "ctsport.cz", "ČT Sport"]
 }
 
+# Globálna premenná, ktorá udrží EPG v pamäti, aby po stlačení STOP nezmizlo
+_EPG_MEMORY_CACHE = {}
+
 def download_and_decode(url):
-    """Stiahne a dekóduje obsah (zvládne GZ aj čisté XML)."""
+    """Bezpečne stiahne a dekóduje obsah bez zrútenia doplnku."""
     try:
-        xbmc.log(f"[TV Free] Sťahujem EPG z: {url}", xbmc.LOGINFO)
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=7) as response:
             if url.endswith(".gz") or ".gz" in url:
                 with gzip.GzipFile(fileobj=response) as uncompressed:
                     return uncompressed.read().decode('utf-8', errors='ignore')
             else:
                 return response.read().decode('utf-8', errors='ignore')
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmc.LOGWARNING)
+        xbmc.log(f"[TV Free] Tiché zlyhanie sťahovania z: {url}", xbmc.LOGWARNING)
     return ""
 
 def parse_xmltv_timestamp(date_str, is_epg_pw=False):
@@ -76,76 +78,80 @@ def parse_xmltv_timestamp(date_str, is_epg_pw=False):
             hours = int(zone_part[1:3])
             minutes = int(zone_part[3:5])
             xml_tz = timezone(timedelta(hours=sign*hours, minutes=sign*minutes))
-            dt = dt.replace(tzinfo=xml_tz)
-            return dt.timestamp()
+            return dt.replace(tzinfo=xml_tz).timestamp()
         elif len(date_str) >= 14:
             dt = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S")
             if is_epg_pw:
                 return time.mktime(dt.timetuple())
             else:
-                dt = dt.replace(tzinfo=timezone.utc)
-                return dt.timestamp()
-    except Exception as e:
+                return dt.replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
         pass
     return None
 
 def get_xmltv_epg():
-    """Pôvodná funkcia sťahovania EPG z iptv-epg.org a epg.pw."""
-    epg_dict = {}
+    """Načíta program a v prípade chyby po stlačení STOP vráti predošlé dáta z pamäte."""
+    global _EPG_MEMORY_CACHE
     
-    # Postupné sťahovanie – ak jeden web zlyhá, ostatné idú ďalej
-    xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
-    xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
-    
-    current_date = time.strftime("%Y%m%d", time.localtime())
-    xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
-    xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
-    
-    main_xml = (xml_sk if xml_sk else "") + (xml_cz if xml_cz else "")
-    now_ts = time.time()
-    
-    pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
-    
-    if main_xml and "<programme" in main_xml:
-        matches = re.findall(pattern, main_xml, re.DOTALL)
-        for start_str, stop_str, channel_id, title in matches:
-            start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=False)
-            stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=False)
-            
-            if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
-                clean_title = title.strip()
-                if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
-                    continue
-                start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+    try:
+        xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
+        xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
+        
+        current_date = time.strftime("%Y%m%d", time.localtime())
+        xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
+        xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
+        
+        main_xml = (xml_sk if xml_sk else "") + (xml_cz if xml_cz else "")
+        now_ts = time.time()
+        
+        local_dict = {}
+        pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
+        
+        if main_xml and "<programme" in main_xml:
+            matches = re.findall(pattern, main_xml, re.DOTALL)
+            for start_str, stop_str, channel_id, title in matches:
+                start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=False)
+                stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=False)
                 
-                # Uložíme pod channel_id z XML
-                epg_dict[channel_id] = f"({start_time} - {end_time}) {clean_title}"
+                if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
+                    clean_title = title.strip()
+                    if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
+                        continue
+                    start_time = time.strftime("%H:%M", time.localtime(start_ts))
+                    end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+                    local_dict[channel_id] = f"({start_time} - {end_time}) {clean_title}"
 
-    joj_sport_xml = (xml_joj_sport if xml_joj_sport else "") + (xml_joj_sport2 if xml_joj_sport2 else "")
-    if joj_sport_xml and "<programme" in joj_sport_xml:
-        matches = re.findall(pattern, joj_sport_xml, re.DOTALL)
-        for start_str, stop_str, channel_id, title in matches:
-            start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=True)
-            stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=True)
-            
-            if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
-                clean_title = title.strip()
-                if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
-                    continue
-                start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                program_text = f"({start_time} - {end_time}) {clean_title}"
+        joj_sport_xml = (xml_joj_sport if xml_joj_sport else "") + (xml_joj_sport2 if xml_joj_sport2 else "")
+        if joj_sport_xml and "<programme" in joj_sport_xml:
+            matches = re.findall(pattern, joj_sport_xml, re.DOTALL)
+            for start_str, stop_str, channel_id, title in matches:
+                start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=True)
+                stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=True)
                 
-                if channel_id == "410453":
-                    epg_dict["jojsport"] = program_text
-                elif channel_id == "413189":
-                    epg_dict["jojsport2"] = program_text
+                if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
+                    clean_title = title.strip()
+                    if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
+                        continue
+                    start_time = time.strftime("%H:%M", time.localtime(start_ts))
+                    end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+                    program_text = f"({start_time} - {end_time}) {clean_title}"
                     
-    return epg_dict
+                    if channel_id == "410453":
+                        local_dict["jojsport"] = program_text
+                    elif channel_id == "413189":
+                        local_dict["jojsport2"] = program_text
+        
+        # Ak sme úspešne načítali nové dáta, aktualizujeme pamäť cache
+        if local_dict:
+            _EPG_MEMORY_CACHE.update(local_dict)
+            
+    except Exception as e:
+        xbmc.log(f"[TV Free] Chyba pri spracovaní EPG, zachraňujem pôvodné dáta: {str(e)}", xbmc.LOGERROR)
+        
+    return _EPG_MEMORY_CACHE
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
-    """Pritiahne a napáruje správne EPG k zobrazeniu položky."""
+    """Bezpečne pridá stanicu so zachovaným programom."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -157,7 +163,6 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     
     if not is_folder:
         current_program = None
-        # Prejdeme zoznam aliasov v MAP_EPG pre dané tvg_id stanice
         if epg_dict and tvg_id in MAP_EPG:
             for xml_id in MAP_EPG[tvg_id]:
                 if xml_id in epg_dict:
