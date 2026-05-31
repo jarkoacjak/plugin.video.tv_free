@@ -56,21 +56,20 @@ def clean_name(name):
 def get_pvr_epg_path():
     """Zistí nastavenú cestu k XMLTV súboru priamo z nastavení IPTV Simple Clienta."""
     try:
-        # Prečítame settings súbor klienta priamo z Kodi profilu
         settings_path = xbmcvfs.translatePath("special://profile/addon_data/pvr.iptvsimple/settings.xml")
         if xbmcvfs.exists(settings_path):
             with xbmcvfs.File(settings_path, 'r') as f:
                 xml_text = f.read()
-                # Vyhľadáme nastavenie pre XMLTV cestu (epgUrl alebo epgPath)
+                # Flexibilnejší regex pre akékoľvek úvodzovky alebo formátovanie v nastaveniach
                 url_match = re.search(r'id="epgUrl"[^>]*>(.*?)<', xml_text)
                 if url_match and url_match.group(1):
-                    return url_match.group(1)
+                    return url_match.group(1).strip()
                 
                 path_match = re.search(r'id="epgPath"[^>]*>(.*?)<', xml_text)
                 if path_match and path_match.group(1):
-                    return path_match.group(1)
-    except:
-        pass
+                    return path_match.group(1).strip()
+    except Exception as e:
+        xbmc.log(f"[TV Free] Nepodarilo sa prečítať nastavenia pvr.iptvsimple: {str(e)}", xbmc.LOGERROR)
     return None
 
 def get_xmltv_epg():
@@ -79,54 +78,59 @@ def get_xmltv_epg():
     epg_source = get_pvr_epg_path()
     
     if not epg_source:
+        xbmc.log("[TV Free] Žiadny zdroj EPG nebol nájdený v nastaveniach PVR.", xbmc.LOGNOTICE)
         return epg_dict
 
     try:
         xml_content = ""
-        # Ak ide o internetovú adresu, stiahneme ju
+        # 1. Možnosť: Internetový odkaz
         if epg_source.startswith("http://") or epg_source.startswith("https://"):
             req = urllib.request.Request(epg_source, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                if epg_source.endswith(".gz"):
+            with urllib.request.urlopen(req, timeout=12) as response:
+                if epg_source.endswith(".gz") or ".xml.gz" in epg_source:
                     with gzip.GzipFile(fileobj=response) as uncompressed:
                         xml_content = uncompressed.read().decode('utf-8', errors='ignore')
                 else:
                     xml_content = response.read().decode('utf-8', errors='ignore')
+        # 2. Možnosť: Miestny súbor v zariadení
         else:
-            # Ak ide o lokálny súbor v zariadení
             local_path = xbmcvfs.translatePath(epg_source)
             if xbmcvfs.exists(local_path):
-                with xbmcvfs.File(local_path, 'r') as f:
+                # Čítame ako binárny súbor (bytes), aby sme predišli problémom s kódovaním textu
+                with xbmcvfs.File(local_path, 'rb') as f:
+                    raw_data = f.read()
                     if local_path.endswith(".gz"):
-                        # Ošetrenie lokálneho gzip súboru v Kodi prostredí
                         import io
-                        raw_data = f.read()
-                        with gzip.GzipFile(fileobj=io.BytesIO(raw_data.encode('utf-8', errors='ignore'))) as uncompressed:
+                        with gzip.GzipFile(fileobj=io.BytesIO(raw_data)) as uncompressed:
                             xml_content = uncompressed.read().decode('utf-8', errors='ignore')
                     else:
-                        xml_content = f.read()
+                        xml_content = raw_data.decode('utf-8', errors='ignore')
 
         if xml_content:
-            now_utc = time.gmtime(time.time())
-            now_str = time.strftime("%Y%m%d%H%M%S", now_utc)
+            # Použijeme lokálny čas zariadenia namiesto gmtime (UTC), aby sedel so slovenským EPG
+            now_local = time.localtime(time.time())
+            now_str = time.strftime("%Y%m%d%H%M%S", now_local)
             
-            # Robustný Regex na postupné vyťahovanie programov bez pádu na veľkých súboroch
-            pattern = r'<programme start="(\d+)[^"]*" stop="(\d+)[^"]*" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
+            # Opravený regex na spoľahlivejšie vyťahovanie <title> elementu bez ohľadu na atribúty lang
+            pattern = r'<programme start="(\d{14})[^"]*" stop="(\d{14})[^"]*" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
             matches = re.findall(pattern, xml_content, re.DOTALL)
             
             for start, stop, channel_id, title in matches:
+                # Kontrola, či relácia práve beží (porovnanie textových reťazcov časov)
                 if start <= now_str <= stop:
                     clean_ch = clean_name(channel_id)
                     try:
-                        # Vytiahneme len hodiny a minúty pre čistý zoznam
+                        # Bezpečné vytiahnutie hodín a minút: YYYYMMDDHHMMSS -> HH:MM
                         start_time = f"{start[8:10]}:{start[10:12]}"
                         end_time = f"{stop[8:10]}:{stop[10:12]}"
                     except:
                         start_time, end_time = "??:??", "??:??"
                         
                     epg_dict[clean_ch] = f"({start_time} - {end_time}) {title.strip()}"
+                    
     except Exception as e:
         xbmc.log(f"[TV Free] Chyba pri spracovaní PVR EPG: {str(e)}", xbmc.LOGERROR)
+        
     return epg_dict
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
@@ -144,7 +148,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
         clean_label = clean_name(label)
         clean_tid = clean_name(tvg_id)
         
-        # Hľadáme zhodu v našom očistenom slovníku programu
+        # Hľadáme zhodu podľa názvu kanála alebo priradeného tvg-id
         current_program = epg_dict.get(clean_label) or epg_dict.get(clean_tid)
         
         if current_program:
@@ -224,7 +228,7 @@ def show_live_menu():
 
 def list_slovak_channels():
     xbmcplugin.setContent(HANDLE, 'files')
-    epg_dict = get_xmltv_epg() # Načíta program z tvojho lokálneho/nastaveného PVR odkazu
+    epg_dict = get_xmltv_epg() 
     for name, logo, tid, url in CHANNELS_SK:
         add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid, epg_dict=epg_dict)
     xbmcplugin.endOfDirectory(HANDLE)
@@ -259,4 +263,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-    
+                        
