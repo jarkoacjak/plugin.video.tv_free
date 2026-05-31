@@ -1,19 +1,22 @@
 import sys
 import os
 import urllib.parse
+import urllib.request
+import gzip
 import xbmc
 import xbmcgui
 import xbmcplugin
 import xbmcvfs
 import json
+import time
+import re
+import xml.etree.ElementTree as ET
 
 # --- Configuration (Kodi Engine) ---
 HANDLE = int(sys.argv[1])
 BASE_URL = sys.argv[0]
 
-# Cesta k dátam doplnku tv_free, kam uložíme vygenerovaný playlist
 ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.video.tv_free/")
-
 if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
@@ -42,38 +45,129 @@ def check_iptv_simple_client():
     except Exception:
         return True
 
-def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id=""):
-    """Vytvorí položku v menu Kodi a prepojí ju s info štítkami živého vysielania."""
+def clean_name(name):
+    """Zjednoduší názov stanice pre presné porovnanie."""
+    if not name:
+        return ""
+    name = name.lower()
+    name = re.sub(r'\.sk|\.cz|tv|hd|sk|cz|\s+|-|_', '', name)
+    return name
+
+def get_pvr_epg_path():
+    """Zistí nastavenú cestu k XMLTV súboru priamo z nastavení IPTV Simple Clienta."""
+    try:
+        # Prečítame settings súbor klienta priamo z Kodi profilu
+        settings_path = xbmcvfs.translatePath("special://profile/addon_data/pvr.iptvsimple/settings.xml")
+        if xbmcvfs.exists(settings_path):
+            with xbmcvfs.File(settings_path, 'r') as f:
+                xml_text = f.read()
+                # Vyhľadáme nastavenie pre XMLTV cestu (epgUrl alebo epgPath)
+                url_match = re.search(r'id="epgUrl"[^>]*>(.*?)<', xml_text)
+                if url_match and url_match.group(1):
+                    return url_match.group(1)
+                
+                path_match = re.search(r'id="epgPath"[^>]*>(.*?)<', xml_text)
+                if path_match and path_match.group(1):
+                    return path_match.group(1)
+    except:
+        pass
+    return None
+
+def get_xmltv_epg():
+    """Načíta a spracuje lokálne alebo sieťové EPG z nastavení PVR klienta."""
+    epg_dict = {}
+    epg_source = get_pvr_epg_path()
+    
+    if not epg_source:
+        return epg_dict
+
+    try:
+        xml_content = ""
+        # Ak ide o internetovú adresu, stiahneme ju
+        if epg_source.startswith("http://") or epg_source.startswith("https://"):
+            req = urllib.request.Request(epg_source, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if epg_source.endswith(".gz"):
+                    with gzip.GzipFile(fileobj=response) as uncompressed:
+                        xml_content = uncompressed.read().decode('utf-8', errors='ignore')
+                else:
+                    xml_content = response.read().decode('utf-8', errors='ignore')
+        else:
+            # Ak ide o lokálny súbor v zariadení
+            local_path = xbmcvfs.translatePath(epg_source)
+            if xbmcvfs.exists(local_path):
+                with xbmcvfs.File(local_path, 'r') as f:
+                    if local_path.endswith(".gz"):
+                        # Ošetrenie lokálneho gzip súboru v Kodi prostredí
+                        import io
+                        raw_data = f.read()
+                        with gzip.GzipFile(fileobj=io.BytesIO(raw_data.encode('utf-8', errors='ignore'))) as uncompressed:
+                            xml_content = uncompressed.read().decode('utf-8', errors='ignore')
+                    else:
+                        xml_content = f.read()
+
+        if xml_content:
+            now_utc = time.gmtime(time.time())
+            now_str = time.strftime("%Y%m%d%H%M%S", now_utc)
+            
+            # Robustný Regex na postupné vyťahovanie programov bez pádu na veľkých súboroch
+            pattern = r'<programme start="(\d+)[^"]*" stop="(\d+)[^"]*" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
+            matches = re.findall(pattern, xml_content, re.DOTALL)
+            
+            for start, stop, channel_id, title in matches:
+                if start <= now_str <= stop:
+                    clean_ch = clean_name(channel_id)
+                    try:
+                        # Vytiahneme len hodiny a minúty pre čistý zoznam
+                        start_time = f"{start[8:10]}:{start[10:12]}"
+                        end_time = f"{stop[8:10]}:{stop[10:12]}"
+                    except:
+                        start_time, end_time = "??:??", "??:??"
+                        
+                    epg_dict[clean_ch] = f"({start_time} - {end_time}) {title.strip()}"
+    except Exception as e:
+        xbmc.log(f"[TV Free] Chyba pri spracovaní PVR EPG: {str(e)}", xbmc.LOGERROR)
+    return epg_dict
+
+def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
+    """Vytvorí položku a automaticky spáruje EPG podľa XMLTV dát."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
         query['title'] = label
         
     url = f"{BASE_URL}?{urllib.parse.urlencode(query)}"
-    list_item = xbmcgui.ListItem(label=label)
+    display_label = label
+    plot_info = "Živé vysielanie."
+    
+    if not is_folder and epg_dict:
+        clean_label = clean_name(label)
+        clean_tid = clean_name(tvg_id)
+        
+        # Hľadáme zhodu v našom očistenom slovníku programu
+        current_program = epg_dict.get(clean_label) or epg_dict.get(clean_tid)
+        
+        if current_program:
+            display_label = f"{label}  |  {current_program}"
+            plot_info = f"Práve beží:\n{current_program}"
+
+    list_item = xbmcgui.ListItem(label=display_label)
     
     if icon:
         list_item.setArt({'icon': icon, 'thumb': icon})
     
     if not is_folder:
         list_item.setProperty('IsPlayable', 'true')
-        
-        # NASTAVENIE SPRÁVNYCH METADÁT PRE ŽIVÉ VYSIELANIE (EPG)
-        # Použijeme moderné nastavenie video info tagu, aby skin vedel prečítať PVR EPG
-        video_info = list_item.getVideoInfoTag()
-        video_info.setTitle(label)
-        video_info.setPlot("Program sa zobrazí po načítaní dát z PVR sprievodcu.")
-        
-        # Nastavenie vlastností pre prepojenie s IPTV Simple Clientom
+        list_item.setInfo('video', {
+            'title': display_label,
+            'plot': plot_info,
+        })
         list_item.setProperty('tvg-id', tvg_id)
-        list_item.setProperty('tvg-name', label)
         list_item.setProperty('tvg-logo', icon)
-        list_item.setProperty('IsLiveTV', 'true')
-        list_item.setProperty('channel', label)
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
-# --- ZOZNAMY STANÍC (Meno, Ikona, EPG ID, Stream URL) ---
+# --- ZOZNAMY STANÍC ---
 CHANNELS_SK = [
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
@@ -104,13 +198,9 @@ CHANNELS_CZ = [
     ("ČT Sport", "https://www.itelka.sk/wp-content/uploads/2023/04/ct-sport.png", "CTSport.cz", "http://88.212.15.19/live/test_ctsport_25p/playlist.m3u8")
 ]
 
-# --- FUNKCIA PRE GENERÁCIU PLAYLISTU ---
-
 def generate_pvr_playlist():
-    """Vygeneruje .m3u súbor len ak je nainštalovaný PVR klient."""
     if not check_iptv_simple_client():
         return
-
     m3u_path = os.path.join(ADDON_DATA_PATH, "playlist.m3u")
     try:
         with open(m3u_path, "w", encoding="utf-8") as f:
@@ -122,36 +212,31 @@ def generate_pvr_playlist():
     except Exception as e:
         xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie: {str(e)}")
 
-# --- MENU STRUKTÚRA ---
-
 def show_main_menu():
-    """Hlavné menu doplnku."""
     add_directory_item("Živé vysielania", "live_menu", is_folder=True)
     add_directory_item("Nastaviť playlist do PVR IPTV Simple Client priamo z pluginu", "set_pvr_playlist", is_folder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def show_live_menu():
-    """Menu pod Živými vysielaniami."""
     add_directory_item("Slovenské TV", "list_sk", is_folder=True)
     add_directory_item("České TV", "list_cz", is_folder=True)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_slovak_channels():
-    """Zoznam slovenských staníc s priradením PVR obsahu."""
-    xbmcplugin.setContent(HANDLE, 'episodes') # Nastavíme typ obsahu na epizódy/programy pre zobrazenie infopanela
+    xbmcplugin.setContent(HANDLE, 'files')
+    epg_dict = get_xmltv_epg() # Načíta program z tvojho lokálneho/nastaveného PVR odkazu
     for name, logo, tid, url in CHANNELS_SK:
-        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid)
+        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid, epg_dict=epg_dict)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_czech_channels():
-    """Zoznam českých staníc s priradením PVR obsahu."""
-    xbmcplugin.setContent(HANDLE, 'episodes')
+    xbmcplugin.setContent(HANDLE, 'files')
+    epg_dict = get_xmltv_epg()
     for name, logo, tid, url in CHANNELS_CZ:
-        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid)
+        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid, epg_dict=epg_dict)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    """Spustí video v Kodi prehrávači s hlavičkami."""
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     referer = "https://www.joj.sk/"
     final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
@@ -159,7 +244,6 @@ def play_video(stream_url, title):
     list_item.setInfo('video', {'title': title})
     xbmcplugin.setResolvedUrl(HANDLE, True, list_item)
 
-# --- Router ---
 if __name__ == '__main__':
     params = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
     action = params.get('action')
@@ -175,4 +259,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-        
+    
