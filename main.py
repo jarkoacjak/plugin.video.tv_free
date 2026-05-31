@@ -60,7 +60,6 @@ def get_pvr_epg_path():
         if xbmcvfs.exists(settings_path):
             with xbmcvfs.File(settings_path, 'r') as f:
                 xml_text = f.read()
-                # Flexibilnejší regex pre akékoľvek úvodzovky alebo formátovanie v nastaveniach
                 url_match = re.search(r'id="epgUrl"[^>]*>(.*?)<', xml_text)
                 if url_match and url_match.group(1):
                     return url_match.group(1).strip()
@@ -68,73 +67,76 @@ def get_pvr_epg_path():
                 path_match = re.search(r'id="epgPath"[^>]*>(.*?)<', xml_text)
                 if path_match and path_match.group(1):
                     return path_match.group(1).strip()
-    except Exception as e:
-        xbmc.log(f"[TV Free] Nepodarilo sa prečítať nastavenia pvr.iptvsimple: {str(e)}", xbmc.LOGERROR)
-    return None
+    except:
+        pass
+    # Ak sa nenájde v PVR, použijeme náš vlastný vygenerovaný epg.xml ako zálohu
+    return os.path.join(ADDON_DATA_PATH, "epg.xml")
 
 def get_xmltv_epg():
-    """Načíta a spracuje lokálne alebo sieťové EPG z nastavení PVR klienta."""
+    """Načíta a spracuje lokálne alebo sieťové EPG bez pádov aplikácie."""
     epg_dict = {}
     epg_source = get_pvr_epg_path()
     
     if not epg_source:
-        xbmc.log("[TV Free] Žiadny zdroj EPG nebol nájdený v nastaveniach PVR.", xbmc.LOGNOTICE)
         return epg_dict
 
     try:
         xml_content = ""
-        # 1. Možnosť: Internetový odkaz
+        # Sieťový odkaz s ošetrením chýb (timeout a HTTP chybové kódy nezhodia plugin)
         if epg_source.startswith("http://") or epg_source.startswith("https://"):
-            req = urllib.request.Request(epg_source, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=12) as response:
-                if epg_source.endswith(".gz") or ".xml.gz" in epg_source:
-                    with gzip.GzipFile(fileobj=response) as uncompressed:
-                        xml_content = uncompressed.read().decode('utf-8', errors='ignore')
-                else:
-                    xml_content = response.read().decode('utf-8', errors='ignore')
-        # 2. Možnosť: Miestny súbor v zariadení
-        else:
-            local_path = xbmcvfs.translatePath(epg_source)
-            if xbmcvfs.exists(local_path):
-                # Čítame ako binárny súbor (bytes), aby sme predišli problémom s kódovaním textu
-                with xbmcvfs.File(local_path, 'rb') as f:
-                    raw_data = f.read()
-                    if local_path.endswith(".gz"):
-                        import io
-                        with gzip.GzipFile(fileobj=io.BytesIO(raw_data)) as uncompressed:
+            try:
+                req = urllib.request.Request(epg_source, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=7) as response:
+                    if epg_source.endswith(".gz") or ".xml.gz" in epg_source:
+                        with gzip.GzipFile(fileobj=response) as uncompressed:
                             xml_content = uncompressed.read().decode('utf-8', errors='ignore')
                     else:
-                        xml_content = raw_data.decode('utf-8', errors='ignore')
+                        xml_content = response.read().decode('utf-8', errors='ignore')
+            except Exception as internet_err:
+                xbmc.log(f"[TV Free] EPG URL nedostupná (Chyba: {str(internet_err)}), skúšam lokálnu zálohu.", xbmc.LOGWARNING)
+                # Ak zlyhá internet, pokúsime sa načítať lokálny epg.xml ak existuje
+                backup_path = os.path.join(ADDON_DATA_PATH, "epg.xml")
+                if xbmcvfs.exists(backup_path):
+                    epg_source = backup_path
+                else:
+                    return epg_dict
+
+        # Lokálny súbor
+        if not epg_source.startswith("http://") and not epg_source.startswith("https://"):
+            local_path = xbmcvfs.translatePath(epg_source)
+            if xbmcvfs.exists(local_path):
+                with xbmcvfs.File(local_path, 'r') as f:
+                    if local_path.endswith(".gz"):
+                        import io
+                        raw_data = f.read()
+                        with gzip.GzipFile(fileobj=io.BytesIO(raw_data.encode('utf-8', errors='ignore'))) as uncompressed:
+                            xml_content = uncompressed.read().decode('utf-8', errors='ignore')
+                    else:
+                        xml_content = f.read()
 
         if xml_content:
-            # Použijeme lokálny čas zariadenia namiesto gmtime (UTC), aby sedel so slovenským EPG
             now_local = time.localtime(time.time())
             now_str = time.strftime("%Y%m%d%H%M%S", now_local)
             
-            # Opravený regex na spoľahlivejšie vyťahovanie <title> elementu bez ohľadu na atribúty lang
             pattern = r'<programme start="(\d{14})[^"]*" stop="(\d{14})[^"]*" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
             matches = re.findall(pattern, xml_content, re.DOTALL)
             
             for start, stop, channel_id, title in matches:
-                # Kontrola, či relácia práve beží (porovnanie textových reťazcov časov)
                 if start <= now_str <= stop:
                     clean_ch = clean_name(channel_id)
                     try:
-                        # Bezpečné vytiahnutie hodín a minút: YYYYMMDDHHMMSS -> HH:MM
                         start_time = f"{start[8:10]}:{start[10:12]}"
                         end_time = f"{stop[8:10]}:{stop[10:12]}"
                     except:
                         start_time, end_time = "??:??", "??:??"
                         
                     epg_dict[clean_ch] = f"({start_time} - {end_time}) {title.strip()}"
-                    
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri spracovaní PVR EPG: {str(e)}", xbmc.LOGERROR)
-        
+        xbmc.log(f"[TV Free] Všeobecná chyba pri spracovaní EPG: {str(e)}", xbmc.LOGERROR)
     return epg_dict
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
-    """Vytvorí položku a automaticky spáruje EPG podľa XMLTV dát."""
+    """Vytvorí položku a priradí informácie z sprievodcu."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -142,18 +144,21 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
         
     url = f"{BASE_URL}?{urllib.parse.urlencode(query)}"
     display_label = label
-    plot_info = "Živé vysielanie."
+    plot_info = "Program sa zobrazí po načítaní dát z PVR sprievodcu."
     
-    if not is_folder and epg_dict:
-        clean_label = clean_name(label)
-        clean_tid = clean_name(tvg_id)
-        
-        # Hľadáme zhodu podľa názvu kanála alebo priradeného tvg-id
-        current_program = epg_dict.get(clean_label) or epg_dict.get(clean_tid)
-        
-        if current_program:
-            display_label = f"{label}  |  {current_program}"
-            plot_info = f"Práve beží:\n{current_program}"
+    if not is_folder:
+        if epg_dict:
+            clean_label = clean_name(label)
+            clean_tid = clean_name(tvg_id)
+            current_program = epg_dict.get(clean_label) or epg_dict.get(clean_tid)
+            
+            if current_program:
+                display_label = f"{label}  |  {current_program}"
+                plot_info = f"Práve beží:\n{current_program}"
+            else:
+                display_label = f"{label}  |  (Načítavam aktuálny program...)"
+        else:
+            display_label = f"{label}  |  (Načítavam aktuálny program...)"
 
     list_item = xbmcgui.ListItem(label=display_label)
     
@@ -173,7 +178,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 
 # --- ZOZNAMY STANÍC ---
 CHANNELS_SK = [
-    ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
+    ("TV JOJ", "https://i.ibb.co/6R2N6GZ/joj.png", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
     ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JOJKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
     ("JOJ 24", "https://img.joj.sk/38a52c95-84ce-4c04-b70a-2289a9fd1541", "JOJ24.sk", "https://live.cdn.joj.sk/live/andromeda/joj_news-1080.m3u8"),
@@ -187,7 +192,7 @@ CHANNELS_SK = [
     ("CS Mystery", "https://www.jojgroup.sk/wp-content/uploads/CS-mistery.png", "CSMystery.cz", "https://live.cdn.joj.sk/live/andromeda/cs_mystery-1080.m3u8"),
     ("Prima Love", "https://www.recenzer.cz/wp-content/uploads/2023/10/prima-love-logo.jpg", "PrimaLove.cz", "http://88.212.15.19/live/prima_love_avc_25p/playlist.m3u8"),
     ("TV LUX", "https://213.sk/wp-content/uploads/2020/11/tvlux.jpg", "TVLux.sk", "https://stream.tvlux.sk/luxtv/luxtv-livestream/playlist.m3u8"),
-    ("TV Liptov", "https://yt3.googleusercontent.com/JJ6maA0dhvLU3z45Jhbgcc1brVZQswuPfYS6Da-Gli4MxXEPlhz5yuLkJlp7VL7mG7eSIxBORA=s900-c-k-c0x00ffffff-no-rj", "TVLiptov.sk", "http://95.105.255.137:1935/tvturiec/tvliptov.stream/playlist.m3u8"),
+    ("TV Liptov", "https://www.satelitnatv.sk/wp-content/uploads/2014/11/tv_liptov.png", "TVLiptov.sk", "http://95.105.255.137:1935/tvturiec/tvliptov.stream/playlist.m3u8"),
     ("TV Nitrička", "https://www.satelitnatv.sk/wp-content/uploads/2013/04/nitricka.jpg", "TVNitricka.sk", "https://dash4.antik.sk/live/test_nitricka/playlist.m3u8"),
     ("TV9", "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg", "TV9.sk", "https://dash4.antik.sk/live/test_tv9/playlist.m3u8"),
     ("TV 8", "https://www.digislovakia.sk/wp-content/uploads/2023/04/TV8-logo-2-300x231.png", "TV8.sk", "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"),
@@ -214,11 +219,29 @@ def generate_pvr_playlist():
                 f.write(f'#EXTINF:-1 tvg-id="{tid}" tvg-name="{name}" tvg-logo="{logo}",{name}\n{url}\n')
         xbmcgui.Dialog().ok("PVR Playlist", f"Playlist úspešne vytvorený!\nCesta: {m3u_path}")
     except Exception as e:
-        xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie: {str(e)}")
+        xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie playlistu: {str(e)}")
+
+def generate_pvr_epg():
+    """Vygeneruje prázdnu, ale funkčnú štruktúru epg.xml, aby PVR klient nehlásil chyby."""
+    if not check_iptv_simple_client():
+        return
+    epg_path = os.path.join(ADDON_DATA_PATH, "epg.xml")
+    try:
+        with open(epg_path, "w", encoding="utf-8") as f:
+            f.write('<?xml version="1.0" encoding="utf-8" ?>\n')
+            f.write('<tv generator-info-name="TV Free EPG Generator">\n')
+            all_channels = CHANNELS_SK + CHANNELS_CZ
+            for name, logo, tid, url in all_channels:
+                f.write(f'  <channel id="{tid}">\n    <display-name>{name}</display-name>\n  </channel>\n')
+            f.write('</tv>\n')
+        xbmcgui.Dialog().ok("PVR EPG", f"EPG sprievodca bol úspešne vygenerovaný!\nCesta: {epg_path}")
+    except Exception as e:
+        xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie EPG: {str(e)}")
 
 def show_main_menu():
     add_directory_item("Živé vysielania", "live_menu", is_folder=True)
     add_directory_item("Nastaviť playlist do PVR IPTV Simple Client priamo z pluginu", "set_pvr_playlist", is_folder=False)
+    add_directory_item("Nastaviť generované epg do PVR IPTV Simple Client", "set_pvr_epg", is_folder=False)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def show_live_menu():
@@ -261,6 +284,8 @@ if __name__ == '__main__':
         play_video(params.get('url'), params.get('title'))
     elif action == 'set_pvr_playlist':
         generate_pvr_playlist()
+    elif action == 'set_pvr_epg':
+        generate_pvr_epg()
     else:
         show_main_menu()
-                        
+    
