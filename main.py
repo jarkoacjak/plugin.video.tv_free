@@ -42,96 +42,99 @@ def download_and_decode(url):
         xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmc.LOGWARNING)
     return ""
 
-def parse_xmltv_timestamp(date_str):
-    """Bezpečne a presne premení XMLTV dátum so zónou aj bez nej na lokálny timestamp."""
+def parse_xmltv_timestamp(date_str, is_epg_pw=False):
+    """Bezpečne premení XMLTV dátum na lokálny timestamp podľa zdroja."""
     try:
         date_str = date_str.strip()
         
-        # 1. Prípad so zónou: "20260531150000 +0200" alebo "20260531150000 +0000"
+        # 1. Prípad so zónou (iptv-epg.org): "20260531150000 +0000"
         match = re.match(r'^(\d{14})\s+([+-]\d{4})$', date_str)
         if match:
             time_part = match.group(1)
             zone_part = match.group(2)
             
             dt = datetime.strptime(time_part, "%Y%m%d%H%M%S")
-            
             sign = 1 if zone_part[0] == '+' else -1
             hours = int(zone_part[1:3])
             minutes = int(zone_part[3:5])
             
-            # Vytvoríme objekt časovej zóny priamo z XML
             xml_tz = timezone(timedelta(hours=sign*hours, minutes=sign*minutes))
             dt = dt.replace(tzinfo=xml_tz)
-            
-            # Vráti čistý UTC timestamp nezávislý od chýb v mktime
             return dt.timestamp()
             
-        # 2. Prípad bez zóny: "20260531150000" -> predpokladá sa čisté UTC
+        # 2. Prípad bez zóny (čistých 14 číslic)
         elif len(date_str) >= 14:
             dt = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S")
-            dt = dt.replace(tzinfo=timezone.utc)
-            return dt.timestamp()
+            if is_epg_pw:
+                # epg.pw posiela lokálny stredoeurópsky čas, netreba ho prekladať cez UTC
+                return time.mktime(dt.timetuple())
+            else:
+                # iptv-epg bez zóny berieme ako UTC
+                dt = dt.replace(tzinfo=timezone.utc)
+                return dt.timestamp()
             
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba konverzie času ({date_str}): {str(e)}", xbmc.LOGDEBUG)
+        pass
     return None
 
 def get_xmltv_epg():
-    """Načíta program zo všetkých zdrojov a správne napáruje JOJ Šport z epg.pw."""
+    """Načíta program zo všetkých zdrojov a opraví párovanie pre JOJ Šport."""
     epg_dict = {}
     
     # 1. Hlavné EPG zdroje
     xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
     xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
     
-    # 2. Dynamický dnešný dátum pre tvoje linky z epg.pw
+    # 2. Dynamický dnešný dátum pre linky z epg.pw
     current_date = time.strftime("%Y%m%d", time.localtime())
     xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
     xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
     
-    combined_xml = xml_sk + xml_cz + xml_joj_sport + xml_joj_sport2
-
-    if not combined_xml or "<programme" not in combined_xml:
-        return epg_dict
-
-    try:
-        now_ts = time.time()
-        
-        # Regulárny výraz zachytí celý atribút start aj stop vrátane zóny
-        pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
-        matches = re.findall(pattern, combined_xml, re.DOTALL)
-        
+    # Spracujeme najskôr hlavné zdroje
+    main_xml = xml_sk + xml_cz
+    now_ts = time.time()
+    
+    pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
+    
+    if main_xml and "<programme" in main_xml:
+        matches = re.findall(pattern, main_xml, re.DOTALL)
         for start_str, stop_str, channel_id, title in matches:
-            start_ts = parse_xmltv_timestamp(start_str)
-            stop_ts = parse_xmltv_timestamp(stop_str)
+            start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=False)
+            stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=False)
             
-            if start_ts and stop_ts:
-                # Skontrolujeme, či relácia beží práve teraz podľa reálneho času
-                if start_ts <= now_ts <= stop_ts:
-                    clean_title = title.strip()
-                    
-                    if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
-                        continue
-                    
-                    # Prevod timestampu na lokálny čas zariadenia (Slovensko)
-                    start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                    end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                    program_text = f"({start_time} - {end_time}) {clean_title}"
-                    
-                    # Spárovanie číselných ID z epg.pw na textové tvg-id v Kodi
-                    if channel_id == "410453":
-                        epg_dict["JOJSport.sk"] = program_text
-                    elif channel_id == "413189":
-                        epg_dict["JOJSport2.sk"] = program_text
-                    
-                    # Klasické uloženie pre všetky ostatné kanály
-                    epg_dict[channel_id] = program_text
-                    epg_dict[channel_id.lower()] = program_text
-                    epg_dict[clean_name(channel_id)] = program_text
-                    
-    except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri spracovaní EPG: {str(e)}", xbmc.LOGERROR)
-        
+            if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
+                clean_title = title.strip()
+                if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
+                    continue
+                start_time = time.strftime("%H:%M", time.localtime(start_ts))
+                end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+                program_text = f"({start_time} - {end_time}) {clean_title}"
+                
+                epg_dict[channel_id] = program_text
+                epg_dict[channel_id.lower()] = program_text
+                epg_dict[clean_name(channel_id)] = program_text
+
+    # Spracujeme osobitne JOJ Šport zdroje z epg.pw
+    joj_sport_xml = xml_joj_sport + xml_joj_sport2
+    if joj_sport_xml and "<programme" in joj_sport_xml:
+        matches = re.findall(pattern, joj_sport_xml, re.DOTALL)
+        for start_str, stop_str, channel_id, title in matches:
+            start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=True)
+            stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=True)
+            
+            if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
+                clean_title = title.strip()
+                if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
+                    continue
+                start_time = time.strftime("%H:%M", time.localtime(start_ts))
+                end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+                program_text = f"({start_time} - {end_time}) {clean_title}"
+                
+                if channel_id == "410453":
+                    epg_dict["JOJSport.sk"] = program_text
+                elif channel_id == "413189":
+                    epg_dict["JOJSport2.sk"] = program_text
+
     return epg_dict
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
@@ -262,3 +265,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
+
