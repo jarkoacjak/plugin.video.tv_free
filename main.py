@@ -119,14 +119,19 @@ def get_xmltv_epg():
             
             for start, stop, channel_id, title in matches:
                 if start <= now_str <= stop:
-                    clean_ch = clean_name(channel_id)
                     try:
                         start_time = f"{start[8:10]}:{start[10:12]}"
                         end_time = f"{stop[8:10]}:{stop[10:12]}"
                     except:
                         start_time, end_time = "??:??", "??:??"
                         
-                    epg_dict[clean_ch] = f"({start_time} - {end_time}) {title.strip()}"
+                    program_text = f"({start_time} - {end_time}) {title.strip()}"
+                    
+                    # Uložíme pod vyčisteným názvom (napr. "jojplus")
+                    epg_dict[clean_name(channel_id)] = program_text
+                    # Uložíme AJ pod presným pôvodným tvg-id (napr. "JOJPlus.sk") pre 100% istotu
+                    epg_dict[channel_id] = program_text
+                    
     except Exception as e:
         xbmc.log(f"[TV Free] Všeobecná chyba pri spracovaní EPG: {str(e)}", xbmc.LOGERROR)
     return epg_dict
@@ -140,21 +145,22 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
         
     url = f"{BASE_URL}?{urllib.parse.urlencode(query)}"
     display_label = label
-    plot_info = "Program sa zobrazí po načítaní dát z PVR sprievodcu."
+    plot_info = "Živé vysielanie."
     
     if not is_folder:
         if epg_dict:
-            clean_label = clean_name(label)
-            clean_tid = clean_name(tvg_id)
-            current_program = epg_dict.get(clean_label) or epg_dict.get(clean_tid)
+            # Hľadáme podľa čistého popisu, čistého tvg_id, alebo presného tvg_id z XML
+            current_program = (epg_dict.get(clean_name(label)) or 
+                               epg_dict.get(clean_name(tvg_id)) or 
+                               epg_dict.get(tvg_id))
             
             if current_program:
                 display_label = f"{label}  |  {current_program}"
                 plot_info = f"Práve beží:\n{current_program}"
             else:
-                display_label = f"{label}  |  (Načítavam aktuálny program...)"
+                display_label = f"{label}  |  Živé vysielanie"
         else:
-            display_label = f"{label}  |  (Načítavam aktuálny program...)"
+            display_label = f"{label}  |  Živé vysielanie"
 
     list_item = xbmcgui.ListItem(label=display_label)
     
@@ -172,7 +178,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
-# --- ZOZNAMY STANÍC (S PÔVODNÝMI LOGAMI) ---
+# --- ZOZNAMY STANÍC ---
 CHANNELS_SK = [
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
@@ -283,4 +289,4 @@ if __name__ == '__main__':
         generate_pvr_epg()
     else:
         show_main_menu()
-        
+            
