@@ -20,7 +20,7 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
 def clean_name(name):
-    """Zjednoduší názov stanice na maximum, aby sa našla zhoda za každých okolností."""
+    """Zjednoduší názov stanice na maximum pre porovnávanie."""
     if not name:
         return ""
     name = name.lower()
@@ -28,65 +28,90 @@ def clean_name(name):
     return name
 
 def download_and_decode(url):
-    """Pomocná funkcia na stiahnutie a rozbalenie GZ súboru z internetu."""
+    """Stiahne a dekóduje obsah (zvládne GZ aj čisté XML)."""
     try:
         xbmc.log(f"[TV Free] Sťahujem EPG z: {url}", xbmc.LOGINFO)
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10) as response:
-            with gzip.GzipFile(fileobj=response) as uncompressed:
-                return uncompressed.read().decode('utf-8', errors='ignore')
+            if url.endswith(".gz") or ".gz" in url:
+                with gzip.GzipFile(fileobj=response) as uncompressed:
+                    return uncompressed.read().decode('utf-8', errors='ignore')
+            else:
+                return response.read().decode('utf-8', errors='ignore')
     except Exception as e:
         xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmc.LOGWARNING)
     return ""
 
 def get_xmltv_epg():
-    """Načíta skutočný televízny program z iptv-epg.org zdrojov."""
+    """Načíta program a automaticky opraví UTC časový posun pre Slovensko."""
     epg_dict = {}
     
+    # 1. Stiahnutie hlavných zdrojov
     xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
     xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
     
-    combined_xml = xml_sk + xml_cz
+    # Dynamic date pre epg.pw (formát YYYYMMDD)
+    current_date = time.strftime("%Y%m%d", time.localtime())
+    
+    # 2. Stiahnutie tvojich nových špecifických zdrojov pre JOJ Šport z epg.pw
+    xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
+    xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
+    
+    # Spojíme všetky XML dáta do jedného veľkého textu
+    combined_xml = xml_sk + xml_cz + xml_joj_sport + xml_joj_sport2
 
     if not combined_xml or "<programme" not in combined_xml:
-        xbmc.log("[TV Free] Hlavné EPG nedostupné, skúšam záložný GitHub", xbmc.LOGWARNING)
-        combined_xml = download_and_decode("https://raw.githubusercontent.com/radek-k/epg/main/epg.xml.gz")
-
-    if not combined_xml:
         return epg_dict
 
     try:
-        now_str = time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))
+        # Vypočítame lokálny čas a UTC čas, aby sme zistili presný posun v sekundách
+        # Na Slovensku to bude v zime +3600s (+1h) a v lete +7200s (+2h)
+        local_now = time.time()
+        utc_offset = time.mktime(time.localtime(local_now)) - time.mktime(time.gmtime(local_now))
         
+        # Pre porovnanie s XML hľadáme aktuálny čas vyjadrený v UTC, 
+        # pretože XML dáta v iptv-epg sú v UTC čase.
+        utc_now_str = time.strftime("%Y%m%d%H%M%S", time.gmtime(local_now))
+        
+        # Regulárny výraz zachytí časy relácie a ID kanálu
         pattern = r'<programme start="(\d{14})[^"]*" stop="(\d{14})[^"]*" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
         matches = re.findall(pattern, combined_xml, re.DOTALL)
         
         for start, stop, channel_id, title in matches:
-            if start <= now_str <= stop:
+            # Porovnávame časy v UTC formáte, čím odstránime predbiehanie
+            if start <= utc_now_str <= stop:
                 clean_title = title.strip()
                 
                 if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
                     continue
-                    
+                
                 try:
-                    start_time = f"{start[8:10]}:{start[10:12]}"
-                    end_time = f"{stop[8:10]}:{stop[10:12]}"
+                    # Skonvertujeme UTC čas z XML na sekundy, pripočítame lokálny posun a premeníme na čitateľný čas
+                    start_struct = time.strptime(start, "%Y%m%d%H%M%S")
+                    stop_struct = time.strptime(stop, "%Y%m%d%H%M%S")
+                    
+                    local_start = time.localtime(time.mktime(start_struct) + utc_offset)
+                    local_stop = time.localtime(time.mktime(stop_struct) + utc_offset)
+                    
+                    start_time = time.strftime("%H:%M", local_start)
+                    end_time = time.strftime("%H:%M", local_stop)
                 except:
                     start_time, end_time = "??:??", "??:??"
                     
                 program_text = f"({start_time} - {end_time}) {clean_title}"
                 
+                # Priradíme reláciu k ID stanice
                 epg_dict[channel_id] = program_text
                 epg_dict[channel_id.lower()] = program_text
                 epg_dict[clean_name(channel_id)] = program_text
                 
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri spracovaní XML tagov: {str(e)}", xbmc.LOGERROR)
+        xbmc.log(f"[TV Free] Chyba pri spracovaní EPG časov: {str(e)}", xbmc.LOGERROR)
         
     return epg_dict
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
-    """Vytvorí položku a priradí jej skutočný aktuálny program relácie."""
+    """Vytvorí položku v zozname s opraveným zobrazením programu."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -111,29 +136,25 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
             display_label = f"{label}  |  Živé vysielanie"
 
     list_item = xbmcgui.ListItem(label=display_label)
-    
     if icon:
         list_item.setArt({'icon': icon, 'thumb': icon})
     
     if not is_folder:
         list_item.setProperty('IsPlayable', 'true')
-        list_item.setInfo('video', {
-            'title': display_label,
-            'plot': plot_info,
-        })
+        list_item.setInfo('video', {'title': display_label, 'plot': plot_info})
         list_item.setProperty('tvg-id', tvg_id)
         list_item.setProperty('tvg-logo', icon)
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
-# --- ZOZNAMY STANÍC (PRIDANÁ PRIMA SK / PLUS) ---
+# --- ZOZNAM STANÍC S FIXNUTÝM TVG-ID PRE JOJ ŠPORT (Z EPG.PW) ---
 CHANNELS_SK = [
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
     ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JojKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
     ("JOJ 24", "https://img.joj.sk/38a52c95-84ce-4c04-b70a-2289a9fd1541", "JOJ24.sk", "https://live.cdn.joj.sk/live/andromeda/joj_news-1080.m3u8"),
-    ("JOJ Šport", "https://img.joj.sk/rx660n/662097da-11c1-434a-a923-3e00cdcb81e7", "JOJSport.sk", "https://live.cdn.joj.sk/live/andromeda/joj_sport-1080.m3u8"),
-    ("JOJ Šport 2", "https://static.hnonline.sk/images/slike/2025/12/04/o_4878486_1024.png", "JOJSport2.sk", "https://live.cdn.joj.sk/live/andromeda/joj_sport2-1080.m3u8"),
+    ("JOJ Šport", "https://img.joj.sk/rx660n/662097da-11c1-434a-a923-3e00cdcb81e7", "410453", "https://live.cdn.joj.sk/live/andromeda/joj_sport-1080.m3u8"),
+    ("JOJ Šport 2", "https://static.hnonline.sk/images/slike/2025/12/04/o_4878486_1024.png", "413189", "https://live.cdn.joj.sk/live/andromeda/joj_sport2-1080.m3u8"),
     ("Jojko", "https://i.ibb.co/TxFWhc1J/jojko.png", "Jojko.sk", "https://live.cdn.joj.sk/live/andromeda/jojko-1080.m3u8"),
     ("JOJ Family", "https://i.ibb.co/hJgjKqpF/joj-family.png", "JOJFamily.sk", "https://live.cdn.joj.sk/live/andromeda/family-1080.m3u8"),
     ("JOJ Cinema", "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png", "JOJCinema.sk", "https://live.cdn.joj.sk/live/andromeda/cinema-1080.m3u8"),
@@ -217,3 +238,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
+        
