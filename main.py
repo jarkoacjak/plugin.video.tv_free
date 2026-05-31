@@ -20,10 +20,11 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
 def clean_name(name):
-    """Zjednoduší názov stanice na maximum pre porovnávanie."""
+    """Zjednoduší názov stanice alebo ID na čisté malé alfanumerické znaky pre bezpečné porovnanie."""
     if not name:
         return ""
     name = name.lower()
+    # Odstráni koncovky, medzery, pomlčky a nepodstatné slová
     name = re.sub(r'\.sk|\.cz|tv|hd|sk|cz|\s+|-|_', '', name)
     return name
 
@@ -39,7 +40,7 @@ def download_and_decode(url):
             else:
                 return response.read().decode('utf-8', errors='ignore')
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmc.LOGWARNING)
+        xbmc.log(f"[TV Free] Chyba pri sťahovaní z {url}: {str(e)}", xbmcvfs.LOGWARNING)
     return ""
 
 def parse_xmltv_timestamp(date_str, is_epg_pw=False):
@@ -78,7 +79,7 @@ def parse_xmltv_timestamp(date_str, is_epg_pw=False):
     return None
 
 def get_xmltv_epg():
-    """Načíta program zo všetkých zdrojov a opraví párovanie pre JOJ Šport."""
+    """Načíta program zo všetkých zdrojov a uloží ho pod zjednodušenými kľúčmi."""
     epg_dict = {}
     
     # 1. Hlavné EPG zdroje
@@ -90,7 +91,6 @@ def get_xmltv_epg():
     xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
     xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
     
-    # Spracujeme najskôr hlavné zdroje
     main_xml = xml_sk + xml_cz
     now_ts = time.time()
     
@@ -110,6 +110,7 @@ def get_xmltv_epg():
                 end_time = time.strftime("%H:%M", time.localtime(stop_ts))
                 program_text = f"({start_time} - {end_time}) {clean_title}"
                 
+                # Uložíme pod surovým ID, malým ID a super-očisteným ID (napr. senzi, tvjoj, jojplus)
                 epg_dict[channel_id] = program_text
                 epg_dict[channel_id.lower()] = program_text
                 epg_dict[clean_name(channel_id)] = program_text
@@ -132,13 +133,15 @@ def get_xmltv_epg():
                 
                 if channel_id == "410453":
                     epg_dict["JOJSport.sk"] = program_text
+                    epg_dict["jojsport"] = program_text
                 elif channel_id == "413189":
                     epg_dict["JOJSport2.sk"] = program_text
+                    epg_dict["jojsport2"] = program_text
 
     return epg_dict
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
-    """Pridá položku do zoznamu v Kodi."""
+    """Pridá položku do zoznamu v Kodi s inteligentným záložným vyhľadávaním EPG."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -151,10 +154,23 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     if not is_folder:
         current_program = None
         if epg_dict:
+            # 1. Pokus: Hľadanie cez presné ID alebo jeho variácie
             current_program = (epg_dict.get(tvg_id) or 
                                epg_dict.get(tvg_id.lower()) or 
                                epg_dict.get(clean_name(tvg_id)) or 
                                epg_dict.get(clean_name(label)))
+            
+            # 2. Pokus (Záloha): Ak sa nič nenašlo, prejdeme slovník a skúsime čiastočnú zhodu v očistených názvoch
+            if not current_program:
+                clean_label_name = clean_name(label)
+                clean_tvg_id = clean_name(tvg_id)
+                for epg_key, epg_val in epg_dict.items():
+                    if clean_label_name and clean_label_name in epg_key:
+                        current_program = epg_val
+                        break
+                    if clean_tvg_id and clean_tvg_id in epg_key:
+                        current_program = epg_val
+                        break
             
         if current_program:
             display_label = f"{label}  |  {current_program}"
