@@ -69,7 +69,6 @@ def get_pvr_epg_path():
                     return path_match.group(1).strip()
     except:
         pass
-    # Ak sa nenájde v PVR, použijeme náš vlastný vygenerovaný epg.xml ako zálohu
     return os.path.join(ADDON_DATA_PATH, "epg.xml")
 
 def get_xmltv_epg():
@@ -82,7 +81,6 @@ def get_xmltv_epg():
 
     try:
         xml_content = ""
-        # Sieťový odkaz s ošetrením chýb (timeout a HTTP chybové kódy nezhodia plugin)
         if epg_source.startswith("http://") or epg_source.startswith("https://"):
             try:
                 req = urllib.request.Request(epg_source, headers={'User-Agent': 'Mozilla/5.0'})
@@ -93,15 +91,13 @@ def get_xmltv_epg():
                     else:
                         xml_content = response.read().decode('utf-8', errors='ignore')
             except Exception as internet_err:
-                xbmc.log(f"[TV Free] EPG URL nedostupná (Chyba: {str(internet_err)}), skúšam lokálnu zálohu.", xbmc.LOGWARNING)
-                # Ak zlyhá internet, pokúsime sa načítať lokálny epg.xml ak existuje
+                xbmc.log(f"[TV Free] EPG URL nedostupná ({str(internet_err)}), skúšam lokálnu zálohu.", xbmc.LOGWARNING)
                 backup_path = os.path.join(ADDON_DATA_PATH, "epg.xml")
                 if xbmcvfs.exists(backup_path):
                     epg_source = backup_path
                 else:
                     return epg_dict
 
-        # Lokálny súbor
         if not epg_source.startswith("http://") and not epg_source.startswith("https://"):
             local_path = xbmcvfs.translatePath(epg_source)
             if xbmcvfs.exists(local_path):
@@ -176,9 +172,9 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 
     xbmcplugin.addDirectoryItem(handle=HANDLE, url=url, listitem=list_item, isFolder=is_folder)
 
-# --- ZOZNAMY STANÍC ---
+# --- ZOZNAMY STANÍC (S PÔVODNÝMI LOGAMI) ---
 CHANNELS_SK = [
-    ("TV JOJ", "https://i.ibb.co/6R2N6GZ/joj.png", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
+    ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
     ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JOJKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
     ("JOJ 24", "https://img.joj.sk/38a52c95-84ce-4c04-b70a-2289a9fd1541", "JOJ24.sk", "https://live.cdn.joj.sk/live/andromeda/joj_news-1080.m3u8"),
@@ -192,7 +188,7 @@ CHANNELS_SK = [
     ("CS Mystery", "https://www.jojgroup.sk/wp-content/uploads/CS-mistery.png", "CSMystery.cz", "https://live.cdn.joj.sk/live/andromeda/cs_mystery-1080.m3u8"),
     ("Prima Love", "https://www.recenzer.cz/wp-content/uploads/2023/10/prima-love-logo.jpg", "PrimaLove.cz", "http://88.212.15.19/live/prima_love_avc_25p/playlist.m3u8"),
     ("TV LUX", "https://213.sk/wp-content/uploads/2020/11/tvlux.jpg", "TVLux.sk", "https://stream.tvlux.sk/luxtv/luxtv-livestream/playlist.m3u8"),
-    ("TV Liptov", "https://www.satelitnatv.sk/wp-content/uploads/2014/11/tv_liptov.png", "TVLiptov.sk", "http://95.105.255.137:1935/tvturiec/tvliptov.stream/playlist.m3u8"),
+    ("TV Liptov", "https://yt3.googleusercontent.com/JJ6maA0dhvLU3z45Jhbgcc1brVZQswuPfYS6Da-Gli4MxXEPlhz5yuLkJlp7VL7mG7eSIxBORA=s900-c-k-c0x00ffffff-no-rj", "TVLiptov.sk", "http://95.105.255.137:1935/tvturiec/tvliptov.stream/playlist.m3u8"),
     ("TV Nitrička", "https://www.satelitnatv.sk/wp-content/uploads/2013/04/nitricka.jpg", "TVNitricka.sk", "https://dash4.antik.sk/live/test_nitricka/playlist.m3u8"),
     ("TV9", "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg", "TV9.sk", "https://dash4.antik.sk/live/test_tv9/playlist.m3u8"),
     ("TV 8", "https://www.digislovakia.sk/wp-content/uploads/2023/04/TV8-logo-2-300x231.png", "TV8.sk", "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"),
@@ -222,7 +218,6 @@ def generate_pvr_playlist():
         xbmcgui.Dialog().error("Chyba", f"Zlyhalo generovanie playlistu: {str(e)}")
 
 def generate_pvr_epg():
-    """Vygeneruje prázdnu, ale funkčnú štruktúru epg.xml, aby PVR klient nehlásil chyby."""
     if not check_iptv_simple_client():
         return
     epg_path = os.path.join(ADDON_DATA_PATH, "epg.xml")
@@ -288,4 +283,4 @@ if __name__ == '__main__':
         generate_pvr_epg()
     else:
         show_main_menu()
-    
+        
