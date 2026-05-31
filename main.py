@@ -9,6 +9,7 @@ import xbmcplugin
 import xbmcvfs
 import time
 import re
+import json
 from datetime import datetime, timezone, timedelta
 
 # --- Configuration (Kodi Engine) ---
@@ -19,33 +20,35 @@ ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.vid
 if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
+CACHE_FILE = os.path.join(ADDON_DATA_PATH, "epg_cache.json")
+
 # --- Striktná prekladová mapa pre EPG ---
 MAP_EPG = {
-    "JOJ.sk": ["JOJ.sk", "joj.sk", "TV JOJ"],
-    "JOJPlus.sk": ["JOJPlus.sk", "jojplus.sk", "JOJ Plus"],
-    "JojKrimi.sk": ["JojKrimi.sk", "jojkrimi.sk", "JOJ WAU", "Wau.sk", "JOJ KRIMI"],
-    "JOJ24.sk": ["JOJ24.sk", "joj24.sk", "JOJ 24"],
-    "JOJSport.sk": ["JOJSport.sk", "jojsport"],
-    "JOJSport2.sk": ["JOJSport2.sk", "jojsport2"],
-    "Jojko.sk": ["Jojko.sk", "jojko.sk", "Jojko"],
-    "JOJFamily.sk": ["JOJFamily.sk", "jojfamily.sk", "JOJ Family"],
-    "JOJCinema.sk": ["JOJCinema.sk", "jojcinema.sk", "JOJ Cinema"],
-    "PrimaPlus.cz": ["PrimaPlus.cz", "primaplus.cz", "Prima SK", "Prima Plus"],
-    "CSHistory.cz": ["CSHistory.cz", "cshistory.cz", "CS History"],
-    "CSFilm.cz": ["CSFilm.cz", "csfilm.cz", "CS Film"],
-    "CSMystery.cz": ["CSMystery.cz", "csmystery.cz", "CS Mystery"],
-    "PrimaLove.cz": ["PrimaLove.cz", "primalove.cz", "Prima Love"],
-    "TVLux.sk": ["Lux.sk", "lux.sk", "TV LUX", "TVLux.sk"],
+    "JOJ.sk": ["JOJ.sk", "joj.sk", "TV JOJ", "JOJ"],
+    "JOJPlus.sk": ["JOJPlus.sk", "jojplus.sk", "JOJ Plus", "JOJ PLUS"],
+    "JojKrimi.sk": ["JojKrimi.sk", "jojkrimi.sk", "JOJ WAU", "Wau.sk", "JOJ KRIMI", "JOJ WAU / KRIMI"],
+    "JOJ24.sk": ["JOJ24.sk", "joj24.sk", "JOJ 24", "JOJ 24 HD"],
+    "JOJSport.sk": ["JOJSport.sk", "jojsport", "JOJ Šport", "JOJ SPORT"],
+    "JOJSport2.sk": ["JOJSport2.sk", "jojsport2", "JOJ Šport 2"],
+    "Jojko.sk": ["Jojko.sk", "jojko.sk", "Jojko", "JOJKO"],
+    "JOJFamily.sk": ["JOJFamily.sk", "jojfamily.sk", "JOJ Family", "JOJ FAMILY"],
+    "JOJCinema.sk": ["JOJCinema.sk", "jojcinema.sk", "JOJ Cinema", "JOJ CINEMA"],
+    "PrimaPlus.cz": ["PrimaPlus.cz", "primaplus.cz", "Prima SK", "Prima Plus", "Prima Cool SK"],
+    "CSHistory.cz": ["CSHistory.cz", "cshistory.cz", "CS History", "CS HISTORY"],
+    "CSFilm.cz": ["CSFilm.cz", "csfilm.cz", "CS Film", "CS FILM"],
+    "CSMystery.cz": ["CSMystery.cz", "csmystery.cz", "CS Mystery", "CS MYSTERY"],
+    "PrimaLove.cz": ["PrimaLove.cz", "primalove.cz", "Prima Love", "Prima LOVE"],
+    "TVLux.sk": ["Lux.sk", "lux.sk", "TV LUX", "TVLux.sk", "TV Lux"],
     "TVLiptov.sk": ["TVLiptov.sk", "tvliptov.sk", "TV Liptov"],
-    "TVNitrička.sk": ["TVNitricka.sk", "tvnitricka.sk", "TV Nitrička"],
-    "TV9.sk": ["TV9.sk", "tv9.sk"],
-    "TV8.sk": ["TV8.sk", "tv8.sk", "TV 8"],
+    "TVNitrička.sk": ["TVNitricka.sk", "tvnitricka.sk", "TV Nitrička", "TV Nitricka"],
+    "TV9.sk": ["TV9.sk", "tv9.sk", "TV9"],
+    "TV8.sk": ["TV8.sk", "tv8.sk", "TV 8", "TV8"],
     "Senzi.sk": ["Senzi.sk", "senzi.sk", "Senzi TV", "Senzi"],
-    "FlowTV.sk": ["FlowTV.sk", "flowtv.sk"],
-    "Minimax.cz": ["Minimax.cz", "minimax.cz", "Minimax"],
-    "Ocko.cz": ["Ocko.cz", "ocko.cz", "Óčko"],
-    "CT24.cz": ["CT24.cz", "ct24.cz", "ČT 24"],
-    "CTSport.cz": ["CTSport.cz", "ctsport.cz", "ČT Sport"]
+    "FlowTV.sk": ["FlowTV.sk", "flowtv.sk", "Flow TV"],
+    "Minimax.cz": ["Minimax.cz", "minimax.cz", "Minimax", "MINIMAX"],
+    "Ocko.cz": ["Ocko.cz", "ocko.cz", "Óčko", "OCKO"],
+    "CT24.cz": ["CT24.cz", "ct24.cz", "ČT 24", "ČT24 HD", "CT 24"],
+    "CTSport.cz": ["CTSport.cz", "ctsport.cz", "ČT Sport", "ČT Sport HD", "CT Sport"]
 }
 
 def download_and_decode(url):
@@ -53,7 +56,7 @@ def download_and_decode(url):
     try:
         xbmc.log(f"[TV Free] Sťahujem EPG z: {url}", xbmc.LOGINFO)
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=8) as response:
             if url.endswith(".gz") or ".gz" in url:
                 with gzip.GzipFile(fileobj=response) as uncompressed:
                     return uncompressed.read().decode('utf-8', errors='ignore')
@@ -64,7 +67,7 @@ def download_and_decode(url):
     return ""
 
 def parse_xmltv_timestamp(date_str, is_epg_pw=False):
-    """Bezpečne premení XMLTV dátum na lokálny timestamp podľa zdroja."""
+    """Bezpečne premení XMLTV dátum na lokálny timestamp."""
     try:
         date_str = date_str.strip()
         match = re.match(r'^(\d{14})\s+([+-]\d{4})$', date_str)
@@ -90,11 +93,21 @@ def parse_xmltv_timestamp(date_str, is_epg_pw=False):
     return None
 
 def get_xmltv_epg():
-    """Načíta kompletný program zo všetkých zdrojov ako predtým."""
+    """Načíta EPG z cache disku (aby nikdy nezmizlo) a na pozadí ho stiahne z nových funkčných webov."""
     epg_dict = {}
+    
+    # 1. Krok: Najprv bleskovo načítaj starú cache z disku, aby používateľ HNEĎ videl EPG a nič nezmizlo
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                epg_dict = json.load(f)
+        except Exception:
+            epg_dict = {}
+
+    # 2. Krok: Stiahni nové dáta z funkčných serverov (elgato nahradil nefunkčné iptv-epg)
     try:
-        xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
-        xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
+        xml_sk = download_and_decode("https://epg.elgato.cz/epg-sk.xml.gz")
+        xml_cz = download_and_decode("https://epg.elgato.cz/epg-cz.xml.gz")
         
         current_date = time.strftime("%Y%m%d", time.localtime())
         xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
@@ -103,6 +116,7 @@ def get_xmltv_epg():
         main_xml = xml_sk + xml_cz
         now_ts = time.time()
         
+        new_epg = {}
         pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
         
         if main_xml and "<programme" in main_xml:
@@ -117,7 +131,7 @@ def get_xmltv_epg():
                         continue
                     start_time = time.strftime("%H:%M", time.localtime(start_ts))
                     end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                    epg_dict[channel_id] = f"({start_time} - {end_time}) {clean_title}"
+                    new_epg[channel_id] = f"({start_time} - {end_time}) {clean_title}"
 
         joj_sport_xml = xml_joj_sport + xml_joj_sport2
         if joj_sport_xml and "<programme" in joj_sport_xml:
@@ -135,11 +149,18 @@ def get_xmltv_epg():
                     program_text = f"({start_time} - {end_time}) {clean_title}"
                     
                     if channel_id == "410453":
-                        epg_dict["jojsport"] = program_text
+                        new_epg["jojsport"] = program_text
                     elif channel_id == "413189":
-                        epg_dict["jojsport2"] = program_text
+                        new_epg["jojsport2"] = program_text
+
+        # Ak sme stiahli nové korektné EPG dáta, aktualizujeme slovník a uložíme cache na disk
+        if new_epg:
+            epg_dict.update(new_epg)
+            with open(CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(epg_dict, f, ensure_ascii=False, indent=4)
+
     except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri spracovaní EPG: {str(e)}", xbmc.LOGERROR)
+        xbmc.log(f"[TV Free] Chyba sťahovania, používam starú cache: {str(e)}", xbmc.LOGWARNING)
         
     return epg_dict
 
