@@ -1,15 +1,10 @@
 import sys
 import os
 import urllib.parse
-import urllib.request
-import gzip
 import xbmc
 import xbmcgui
 import xbmcplugin
 import xbmcvfs
-import time
-import re
-from datetime import datetime, timezone, timedelta
 
 # --- Configuration (Kodi Engine) ---
 HANDLE = int(sys.argv[1])
@@ -19,161 +14,22 @@ ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.vid
 if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
-# --- Striktná prekladová mapa pre EPG ---
-MAP_EPG = {
-    "JOJ.sk": ["JOJ.sk", "joj.sk", "TV JOJ"],
-    "JOJPlus.sk": ["JOJPlus.sk", "jojplus.sk", "JOJ Plus"],
-    "JojKrimi.sk": ["JojKrimi.sk", "jojkrimi.sk", "JOJ WAU", "Wau.sk", "JOJ KRIMI"],
-    "JOJ24.sk": ["JOJ24.sk", "joj24.sk", "JOJ 24"],
-    "JOJSport.sk": ["JOJSport.sk", "jojsport"],
-    "JOJSport2.sk": ["JOJSport2.sk", "jojsport2"],
-    "Jojko.sk": ["Jojko.sk", "jojko.sk", "Jojko"],
-    "JOJFamily.sk": ["JOJFamily.sk", "jojfamily.sk", "JOJ Family"],
-    "JOJCinema.sk": ["JOJCinema.sk", "jojcinema.sk", "JOJ Cinema"],
-    "PrimaPlus.cz": ["PrimaPlus.cz", "primaplus.cz", "Prima SK", "Prima Plus"],
-    "CSHistory.cz": ["CSHistory.cz", "cshistory.cz", "CS History"],
-    "CSFilm.cz": ["CSFilm.cz", "csfilm.cz", "CS Film"],
-    "CSMystery.cz": ["CSMystery.cz", "csmystery.cz", "CS Mystery"],
-    "PrimaLove.cz": ["PrimaLove.cz", "primalove.cz", "Prima Love"],
-    "TVLux.sk": ["Lux.sk", "lux.sk", "TV LUX", "TVLux.sk"],
-    "TVLiptov.sk": ["TVLiptov.sk", "tvliptov.sk", "TV Liptov"],
-    "TVNitrička.sk": ["TVNitricka.sk", "tvnitricka.sk", "TV Nitrička"],
-    "TV9.sk": ["TV9.sk", "tv9.sk"],
-    "TV8.sk": ["TV8.sk", "tv8.sk", "TV 8"],
-    "Senzi.sk": ["Senzi.sk", "senzi.sk", "Senzi TV", "Senzi"],
-    "FlowTV.sk": ["FlowTV.sk", "flowtv.sk"],
-    "Minimax.cz": ["Minimax.cz", "minimax.cz", "Minimax"],
-    "Ocko.cz": ["Ocko.cz", "ocko.cz", "Óčko"],
-    "CT24.cz": ["CT24.cz", "ct24.cz", "ČT 24"],
-    "CTSport.cz": ["CTSport.cz", "ctsport.cz", "ČT Sport"]
-}
-
-# Globálna premenná, ktorá udrží EPG v pamäti, aby po stlačení STOP nezmizlo
-_EPG_MEMORY_CACHE = {}
-
-def download_and_decode(url):
-    """Bezpečne stiahne a dekóduje obsah bez zrútenia doplnku."""
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=7) as response:
-            if url.endswith(".gz") or ".gz" in url:
-                with gzip.GzipFile(fileobj=response) as uncompressed:
-                    return uncompressed.read().decode('utf-8', errors='ignore')
-            else:
-                return response.read().decode('utf-8', errors='ignore')
-    except Exception as e:
-        xbmc.log(f"[TV Free] Tiché zlyhanie sťahovania z: {url}", xbmc.LOGWARNING)
-    return ""
-
-def parse_xmltv_timestamp(date_str, is_epg_pw=False):
-    """Bezpečne premení XMLTV dátum na lokálny timestamp podľa zdroja."""
-    try:
-        date_str = date_str.strip()
-        match = re.match(r'^(\d{14})\s+([+-]\d{4})$', date_str)
-        if match:
-            time_part = match.group(1)
-            zone_part = match.group(2)
-            dt = datetime.strptime(time_part, "%Y%m%d%H%M%S")
-            sign = 1 if zone_part[0] == '+' else -1
-            hours = int(zone_part[1:3])
-            minutes = int(zone_part[3:5])
-            xml_tz = timezone(timedelta(hours=sign*hours, minutes=sign*minutes))
-            return dt.replace(tzinfo=xml_tz).timestamp()
-        elif len(date_str) >= 14:
-            dt = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S")
-            if is_epg_pw:
-                return time.mktime(dt.timetuple())
-            else:
-                return dt.replace(tzinfo=timezone.utc).timestamp()
-    except Exception:
-        pass
-    return None
-
-def get_xmltv_epg():
-    """Načíta program a v prípade chyby po stlačení STOP vráti predošlé dáta z pamäte."""
-    global _EPG_MEMORY_CACHE
-    
-    try:
-        xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
-        xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
-        
-        current_date = time.strftime("%Y%m%d", time.localtime())
-        xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
-        xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
-        
-        main_xml = (xml_sk if xml_sk else "") + (xml_cz if xml_cz else "")
-        now_ts = time.time()
-        
-        local_dict = {}
-        pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
-        
-        if main_xml and "<programme" in main_xml:
-            matches = re.findall(pattern, main_xml, re.DOTALL)
-            for start_str, stop_str, channel_id, title in matches:
-                start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=False)
-                stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=False)
-                
-                if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
-                    clean_title = title.strip()
-                    if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
-                        continue
-                    start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                    end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                    local_dict[channel_id] = f"({start_time} - {end_time}) {clean_title}"
-
-        joj_sport_xml = (xml_joj_sport if xml_joj_sport else "") + (xml_joj_sport2 if xml_joj_sport2 else "")
-        if joj_sport_xml and "<programme" in joj_sport_xml:
-            matches = re.findall(pattern, joj_sport_xml, re.DOTALL)
-            for start_str, stop_str, channel_id, title in matches:
-                start_ts = parse_xmltv_timestamp(start_str, is_epg_pw=True)
-                stop_ts = parse_xmltv_timestamp(stop_str, is_epg_pw=True)
-                
-                if start_ts and stop_ts and (start_ts <= now_ts <= stop_ts):
-                    clean_title = title.strip()
-                    if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
-                        continue
-                    start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                    end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                    program_text = f"({start_time} - {end_time}) {clean_title}"
-                    
-                    if channel_id == "410453":
-                        local_dict["jojsport"] = program_text
-                    elif channel_id == "413189":
-                        local_dict["jojsport2"] = program_text
-        
-        # Ak sme úspešne načítali nové dáta, aktualizujeme pamäť cache
-        if local_dict:
-            _EPG_MEMORY_CACHE.update(local_dict)
-            
-    except Exception as e:
-        xbmc.log(f"[TV Free] Chyba pri spracovaní EPG, zachraňujem pôvodné dáta: {str(e)}", xbmc.LOGERROR)
-        
-    return _EPG_MEMORY_CACHE
-
-def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id="", epg_dict=None):
-    """Bezpečne pridá stanicu so zachovaným programom."""
+def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id=""):
+    """Pridá stanicu do zoznamu a natvrdo jej priradí text Živé vysielanie."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
         query['title'] = label
         
     url = f"{BASE_URL}?{urllib.parse.urlencode(query)}"
-    display_label = label
-    plot_info = "Živé vysielanie stanice."
     
+    # Nastavenie fixného popisku namiesto EPG
     if not is_folder:
-        current_program = None
-        if epg_dict and tvg_id in MAP_EPG:
-            for xml_id in MAP_EPG[tvg_id]:
-                if xml_id in epg_dict:
-                    current_program = epg_dict[xml_id]
-                    break
-                    
-        if current_program:
-            display_label = f"{label}  |  {current_program}"
-            plot_info = f"Práve beží:\n{current_program}"
-        else:
-            display_label = f"{label}  |  Živé vysielanie"
+        display_label = f"{label}  |  Živé vysielanie"
+        plot_info = f"Živé vysielanie stanice {label}."
+    else:
+        display_label = label
+        plot_info = ""
 
     list_item = xbmcgui.ListItem(label=display_label)
     if icon:
@@ -239,16 +95,14 @@ def show_main_menu():
 
 def list_slovak_channels():
     xbmcplugin.setContent(HANDLE, 'files')
-    epg_dict = get_xmltv_epg() 
     for name, logo, tid, url in CHANNELS_SK:
-        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid, epg_dict=epg_dict)
+        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def list_czech_channels():
     xbmcplugin.setContent(HANDLE, 'files')
-    epg_dict = get_xmltv_epg()
     for name, logo, tid, url in CHANNELS_CZ:
-        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid, epg_dict=epg_dict)
+        add_directory_item(name, "play", icon=logo, is_folder=False, video_url=url, tvg_id=tid)
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
