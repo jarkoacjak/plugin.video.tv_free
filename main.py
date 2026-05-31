@@ -9,7 +9,7 @@ import xbmcplugin
 import xbmcvfs
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # --- Configuration (Kodi Engine) ---
 HANDLE = int(sys.argv[1])
@@ -43,34 +43,37 @@ def download_and_decode(url):
     return ""
 
 def parse_xmltv_timestamp(date_str):
-    """Prevedie XMLTV čas (s posunom alebo bez) na čistý lokálny timestamp."""
+    """Bezpečne a presne premení XMLTV dátum so zónou aj bez nej na lokálny timestamp."""
     try:
         date_str = date_str.strip()
-        # Ak obsahuje posun zóny, napr: "20260531150000 +0200"
+        
+        # 1. Prípad so zónou: "20260531150000 +0200" alebo "20260531150000 +0000"
         match = re.match(r'^(\d{14})\s+([+-]\d{4})$', date_str)
         if match:
             time_part = match.group(1)
             zone_part = match.group(2)
             
             dt = datetime.strptime(time_part, "%Y%m%d%H%M%S")
+            
             sign = 1 if zone_part[0] == '+' else -1
             hours = int(zone_part[1:3])
             minutes = int(zone_part[3:5])
             
-            # Prepočet na UTC epoch sekundy
-            utc_ts = time.mktime(dt.timetuple())
-            xml_offset = (hours * 3600 + minutes * 60) * sign
-            utc_ts -= xml_offset
+            # Vytvoríme objekt časovej zóny priamo z XML
+            xml_tz = timezone(timedelta(hours=sign*hours, minutes=sign*minutes))
+            dt = dt.replace(tzinfo=xml_tz)
             
-            # Prevod z UTC na lokálny čas zariadenia
-            return utc_ts - time.timezone
-        
-        # Ak je to čistý čas bez zóny, napr: "20260531150000"
+            # Vráti čistý UTC timestamp nezávislý od chýb v mktime
+            return dt.timestamp()
+            
+        # 2. Prípad bez zóny: "20260531150000" -> predpokladá sa čisté UTC
         elif len(date_str) >= 14:
             dt = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S")
-            return time.mktime(dt.timetuple())
-    except:
-        pass
+            dt = dt.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+            
+    except Exception as e:
+        xbmc.log(f"[TV Free] Chyba konverzie času ({date_str}): {str(e)}", xbmc.LOGDEBUG)
     return None
 
 def get_xmltv_epg():
@@ -81,7 +84,7 @@ def get_xmltv_epg():
     xml_sk = download_and_decode("https://iptv-epg.org/files/epg-sk.xml.gz")
     xml_cz = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
     
-    # 2. Dynamic date pre tvoje linky z epg.pw
+    # 2. Dynamický dnešný dátum pre tvoje linky z epg.pw
     current_date = time.strftime("%Y%m%d", time.localtime())
     xml_joj_sport = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=410453")
     xml_joj_sport2 = download_and_decode(f"https://epg.pw/api/epg.xml?lang=en&date={current_date}&channel_id=413189")
@@ -94,7 +97,7 @@ def get_xmltv_epg():
     try:
         now_ts = time.time()
         
-        # Regulárny výraz na vytiahnutie programu
+        # Regulárny výraz zachytí celý atribút start aj stop vrátane zóny
         pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
         matches = re.findall(pattern, combined_xml, re.DOTALL)
         
@@ -103,25 +106,25 @@ def get_xmltv_epg():
             stop_ts = parse_xmltv_timestamp(stop_str)
             
             if start_ts and stop_ts:
-                # Skontrolujeme, či relácia beží práve teraz
+                # Skontrolujeme, či relácia beží práve teraz podľa reálneho času
                 if start_ts <= now_ts <= stop_ts:
                     clean_title = title.strip()
                     
                     if "žive vysielanie" in clean_title.lower() or "živé vysielanie" in clean_title.lower():
                         continue
                     
-                    # Formátovanie času na HH:MM podľa lokálneho času v Kodi
+                    # Prevod timestampu na lokálny čas zariadenia (Slovensko)
                     start_time = time.strftime("%H:%M", time.localtime(start_ts))
                     end_time = time.strftime("%H:%M", time.localtime(stop_ts))
                     program_text = f"({start_time} - {end_time}) {clean_title}"
                     
-                    # Špeciálne spárovanie pre tvoje epg.pw ID čísla na textové tvg-id
+                    # Spárovanie číselných ID z epg.pw na textové tvg-id v Kodi
                     if channel_id == "410453":
                         epg_dict["JOJSport.sk"] = program_text
                     elif channel_id == "413189":
                         epg_dict["JOJSport2.sk"] = program_text
                     
-                    # Klasické uloženie pre ostatné stanice
+                    # Klasické uloženie pre všetky ostatné kanály
                     epg_dict[channel_id] = program_text
                     epg_dict[channel_id.lower()] = program_text
                     epg_dict[clean_name(channel_id)] = program_text
@@ -145,7 +148,6 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     if not is_folder:
         current_program = None
         if epg_dict:
-            # Hľadanie programu podľa tvg-id alebo názvu stanice
             current_program = (epg_dict.get(tvg_id) or 
                                epg_dict.get(tvg_id.lower()) or 
                                epg_dict.get(clean_name(tvg_id)) or 
@@ -260,4 +262,3 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-                        
