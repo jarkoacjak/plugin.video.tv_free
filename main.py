@@ -19,6 +19,8 @@ ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.vid
 if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
+LOCAL_XML_PATH = os.path.join(ADDON_DATA_PATH, "epg-cz.xml")
+
 # Mapa pre presné spárovanie tvg-id staníc s tvojím XML súborom
 MAP_EPG = {
     "JOJ.sk": ["JOJ.sk", "joj.sk"],
@@ -48,29 +50,25 @@ MAP_EPG = {
     "CTSport.cz": ["CTSport.cz", "ctsport.cz"]
 }
 
-# Globálna pamäť pre surové XML dáta, aby sa po STOP nečakalo na sťahovanie z webu
-if not hasattr(sys, '_tv_free_xml_data'):
-    sys._tv_free_xml_data = ""
-
-def download_and_decode(url):
-    """Stiahne XML a ak je to .gz, automaticky ho rozbalí v pamäti."""
+def download_and_save_xml():
+    """Stiahne .gz súbor z internetu, rozbalí ho a uloží na disk pre okamžité načítanie."""
+    url = "https://iptv-epg.org/files/epg-cz.xml.gz"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=7) as response:
-            if url.endswith(".gz") or ".gz" in url:
-                with gzip.GzipFile(fileobj=response) as uncompressed:
-                    return uncompressed.read().decode('utf-8', errors='ignore')
-            else:
-                return response.read().decode('utf-8', errors='ignore')
+        with urllib.request.urlopen(req, timeout=10) as response:
+            with gzip.GzipFile(fileobj=response) as uncompressed:
+                xml_content = uncompressed.read().decode('utf-8', errors='ignore')
+                if xml_content and "<programme" in xml_content:
+                    with open(LOCAL_XML_PATH, "w", encoding="utf-8") as f:
+                        f.write(xml_content)
+                    return True
     except Exception:
         pass
-    return ""
+    return False
 
 def parse_xmltv_timestamp(date_str):
-    """Prevedie XMLTV čas (napr. 20260601143000 +0200) na UTC timestamp."""
     try:
         date_str = date_str.strip()
-        # Formát s posunom zóny: "YYYYMMDDHHMMSS +HHMM"
         match = re.match(r'^(\d{14})\s+([+-]\d{4})$', date_str)
         if match:
             time_part = match.group(1)
@@ -89,33 +87,42 @@ def parse_xmltv_timestamp(date_str):
     return None
 
 def get_current_epg_dict():
-    """Vráti slovník s programami, ktoré bežia PRESNE TERAZ."""
-    # Ak nemáme stiahnuté dáta v pamäti, stiahneme ich (rýchla .gz verzia)
-    if not sys._tv_free_xml_data:
-        sys._tv_free_xml_data = download_and_decode("https://iptv-epg.org/files/epg-cz.xml.gz")
-        if not sys._tv_free_xml_data:
-            sys._tv_free_xml_data = download_and_decode("https://iptv-epg.org/files/epg-cz.xml")
-
+    """Načíta XML z disku a bleskovo vybere programy pre aktuálny čas."""
+    # 1. Ak lokálny súbor neexistuje, stiahneme ho hneď (prvé spustenie)
+    if not os.path.exists(LOCAL_XML_PATH):
+        download_and_save_xml()
+        
     current_epg = {}
-    if sys._tv_free_xml_data and "<programme" in sys._tv_free_xml_data:
-        # Aktuálny UTC čas
-        now_ts = datetime.now(timezone.utc).timestamp()
-        
-        pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
-        matches = re.findall(pattern, sys._tv_free_xml_data, re.DOTALL)
-        
-        for start_str, stop_str, channel_id, title in matches:
-            start_ts = parse_xmltv_timestamp(start_str)
-            stop_ts = parse_xmltv_timestamp(stop_str)
-            
-            # Kontrola, či program beží presne v tomto momente
-            if start_ts and stop_ts and (start_ts <= now_ts < stop_ts):
-                clean_title = title.strip()
-                # Prevody na lokálny čas tvojho zariadenia pre zobrazenie (napr. 16:20)
-                start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+    
+    # 2. Načítame dáta z lokálneho disku (to je bleskové, funguje ihneď aj po stlačení STOP)
+    if os.path.exists(LOCAL_XML_PATH):
+        try:
+            with open(LOCAL_XML_PATH, "r", encoding="utf-8") as f:
+                xml_data = f.read()
                 
-                current_epg[channel_id.lower()] = f"({start_time} - {end_time}) {clean_title}"
+            if xml_data:
+                now_ts = datetime.now(timezone.utc).timestamp()
+                pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
+                matches = re.findall(pattern, xml_data, re.DOTALL)
+                
+                for start_str, stop_str, channel_id, title in matches:
+                    start_ts = parse_xmltv_timestamp(start_str)
+                    stop_ts = parse_xmltv_timestamp(stop_str)
+                    
+                    if start_ts and stop_ts and (start_ts <= now_ts < stop_ts):
+                        clean_title = title.strip()
+                        start_time = time.strftime("%H:%M", time.localtime(start_ts))
+                        end_time = time.strftime("%H:%M", time.localtime(stop_ts))
+                        current_epg[channel_id.lower()] = f"({start_time} - {end_time}) {clean_title}"
+        except Exception:
+            pass
+
+    # 3. Kontrola na pozadí: Ak je lokálny súbor starší ako 2 hodiny (7200 sekúnd), aktualizujeme ho pre nabudúce
+    if os.path.exists(LOCAL_XML_PATH):
+        file_age = time.time() - os.path.getmtime(LOCAL_XML_PATH)
+        if file_age > 7200:
+            # Spustí sťahovanie novej verzie, aby boli dáta čerstvé pri ďalšom kliknutí
+            download_and_save_xml()
 
     return current_epg
 
