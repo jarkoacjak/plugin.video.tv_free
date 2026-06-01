@@ -21,41 +21,41 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
 
 LOCAL_XML_PATH = os.path.join(ADDON_DATA_PATH, "epg-cz.xml")
 
-# Mapa pre presné spárovanie tvg-id staníc s tvojím XML súborom
+# PRESNÁ MAPA: Spája tvoje tvg-id s ID kanálmi priamo z XML súboru epg-cz.xml.gz
 MAP_EPG = {
-    "JOJ.sk": ["JOJ.sk", "joj.sk"],
-    "JOJPlus.sk": ["JOJPlus.sk", "jojplus.sk"],
-    "JojKrimi.sk": ["JojKrimi.sk", "jojkrimi.sk"],
-    "JOJ24.sk": ["JOJ24.sk", "joj24.sk"],
-    "JOJSport.sk": ["JOJSport.sk", "jojsport.sk"],
-    "JOJSport2.sk": ["JOJSport2.sk", "jojsport2.sk"],
-    "Jojko.sk": ["Jojko.sk", "jojko.sk"],
-    "JOJFamily.sk": ["JOJFamily.sk", "jojfamily.sk"],
-    "JOJCinema.sk": ["JOJCinema.sk", "jojcinema.sk"],
-    "PrimaPlus.cz": ["PrimaPlus.cz", "primaplus.cz"],
-    "CSHistory.cz": ["CSHistory.cz", "cshistory.cz"],
-    "CSFilm.cz": ["CSFilm.cz", "csfilm.cz"],
-    "CSMystery.cz": ["CSMystery.cz", "csmystery.cz"],
-    "PrimaLove.cz": ["PrimaLove.cz", "primalove.cz"],
-    "TVLux.sk": ["TVLux.sk", "tvlux.sk"],
-    "TVLiptov.sk": ["TVLiptov.sk", "tvliptov.sk"],
-    "TVNitrička.sk": ["TVNitricka.sk", "tvnitricka.sk"],
-    "TV9.sk": ["TV9.sk", "tv9.sk"],
-    "TV8.sk": ["TV8.sk", "tv8.sk"],
-    "Senzi.sk": ["Senzi.sk", "senzi.sk"],
-    "FlowTV.sk": ["FlowTV.sk", "flowtv.sk"],
-    "Minimax.cz": ["Minimax.cz", "minimax.cz"],
-    "Ocko.cz": ["Ocko.cz", "ocko.cz"],
-    "CT24.cz": ["CT24.cz", "ct24.cz"],
-    "CTSport.cz": ["CTSport.cz", "ctsport.cz"]
+    "JOJ.sk": "joj.cz",
+    "JOJPlus.sk": "jojplus.cz",
+    "JojKrimi.sk": "jojkrimi.cz",
+    "JOJ24.sk": "joj24.cz",
+    "JOJSport.sk": "jojsport.cz",
+    "JOJSport2.sk": "jojsport2.cz",
+    "Jojko.sk": "jojko.cz",
+    "JOJFamily.sk": "jojfamily.cz",
+    "JOJCinema.sk": "jojcinema.cz",
+    "PrimaPlus.cz": "primask.cz",
+    "CSHistory.cz": "cshistory.cz",
+    "CSFilm.cz": "csfilm.cz",
+    "CSMystery.cz": "csmystery.cz",
+    "PrimaLove.cz": "primalove.cz",
+    "TVLux.sk": "tvlux.cz",
+    "TVLiptov.sk": "tvliptov.cz",
+    "TVNitrička.sk": "tvnitricka.cz",
+    "TV9.sk": "tv9.cz",
+    "TV8.sk": "tv8.cz",
+    "Senzi.sk": "senzi.cz",
+    "FlowTV.sk": "flowtv.cz",
+    "Minimax.cz": "minimax.cz",
+    "Ocko.cz": "ocko.cz",
+    "CT24.cz": "ct24.cz",
+    "CTSport.cz": "ctsport.cz"
 }
 
 def download_and_save_xml():
-    """Stiahne .gz súbor z internetu, rozbalí ho a uloží na disk pre okamžité načítanie."""
+    """Stiahne .gz súbor, rozbalí ho a uloží na disk pre okamžité načítanie."""
     url = "https://iptv-epg.org/files/epg-cz.xml.gz"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=12) as response:
             with gzip.GzipFile(fileobj=response) as uncompressed:
                 xml_content = uncompressed.read().decode('utf-8', errors='ignore')
                 if xml_content and "<programme" in xml_content:
@@ -88,13 +88,11 @@ def parse_xmltv_timestamp(date_str):
 
 def get_current_epg_dict():
     """Načíta XML z disku a bleskovo vybere programy pre aktuálny čas."""
-    # 1. Ak lokálny súbor neexistuje, stiahneme ho hneď (prvé spustenie)
     if not os.path.exists(LOCAL_XML_PATH):
         download_and_save_xml()
         
     current_epg = {}
     
-    # 2. Načítame dáta z lokálneho disku (to je bleskové, funguje ihneď aj po stlačení STOP)
     if os.path.exists(LOCAL_XML_PATH):
         try:
             with open(LOCAL_XML_PATH, "r", encoding="utf-8") as f:
@@ -113,15 +111,15 @@ def get_current_epg_dict():
                         clean_title = title.strip()
                         start_time = time.strftime("%H:%M", time.localtime(start_ts))
                         end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                        current_epg[channel_id.lower()] = f"({start_time} - {end_time}) {clean_title}"
+                        # Ukladáme ID kanála malými písmenami pre presnú zhodu
+                        current_epg[channel_id.lower().strip()] = f"({start_time} - {end_time}) {clean_title}"
         except Exception:
             pass
 
-    # 3. Kontrola na pozadí: Ak je lokálny súbor starší ako 2 hodiny (7200 sekúnd), aktualizujeme ho pre nabudúce
+    # Kontrola na pozadí: Ak je súbor starší ako 2 hodiny, stiahne nový pre ďalšie spustenie
     if os.path.exists(LOCAL_XML_PATH):
         file_age = time.time() - os.path.getmtime(LOCAL_XML_PATH)
         if file_age > 7200:
-            # Spustí sťahovanie novej verzie, aby boli dáta čerstvé pri ďalšom kliknutí
             download_and_save_xml()
 
     return current_epg
@@ -138,11 +136,11 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
     
     if not is_folder:
         current_program = None
+        # Zistíme, aké ID má kanál priradené v našej mape pre XML
         if epg_dict and tvg_id in MAP_EPG:
-            for xml_id in MAP_EPG[tvg_id]:
-                if xml_id.lower() in epg_dict:
-                    current_program = epg_dict[xml_id.lower()]
-                    break
+            target_xml_id = MAP_EPG[tvg_id].lower()
+            if target_xml_id in epg_dict:
+                current_program = epg_dict[target_xml_id]
         
         if current_program:
             display_label = f"{label}  |  {current_program}"
@@ -166,13 +164,13 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 CHANNELS_SK = [
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
-    ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JojKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
+    ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JofKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
     ("JOJ 24", "https://img.joj.sk/38a52c95-84ce-4c04-b70a-2289a9fd1541", "JOJ24.sk", "https://live.cdn.joj.sk/live/andromeda/joj_news-1080.m3u8"),
     ("JOJ Šport", "https://img.joj.sk/rx660n/662097da-11c1-434a-a923-3e00cdcb81e7", "JOJSport.sk", "https://live.cdn.joj.sk/live/andromeda/joj_sport-1080.m3u8"),
     ("JOJ Šport 2", "https://static.hnonline.sk/images/slike/2025/12/04/o_4878486_1024.png", "JOJSport2.sk", "https://live.cdn.joj.sk/live/andromeda/joj_sport2-1080.m3u8"),
     ("Jojko", "https://i.ibb.co/TxFWhc1J/jojko.png", "Jojko.sk", "https://live.cdn.joj.sk/live/andromeda/jojko-1080.m3u8"),
     ("JOJ Family", "https://i.ibb.co/hJgjKqpF/joj-family.png", "JOJFamily.sk", "https://live.cdn.joj.sk/live/andromeda/family-1080.m3u8"),
-    ("JOJ Cinema", "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png", "JOJCinema.sk", "https://live.cdn.joj.sk/live/andromeda/cinema-1080.m3u8"),
+    ("JOJ Cinema", "http://www.mediaguru.cz/wp-content/uploads/2016/06/Joj-Cinema_akt.png", "JOJSinema.sk", "https://live.cdn.joj.sk/live/andromeda/cinema-1080.m3u8"),
     ("Prima SK", "https://www.jojgroup.sk/wp-content/uploads/Prima_Plus_Logo_2021.svg.png", "PrimaPlus.cz", "http://88.212.15.19/live/prima_avc_25p/playlist.m3u8"),
     ("CS History", "https://img.joj.sk/418430b1-b598-40d1-8552-39b473c73836", "CSHistory.cz", "https://live.cdn.joj.sk/live/andromeda/cs_history-1080.m3u8"),
     ("CS Film", "https://staticeu.sweet.tv/images/cache/channel_icons/BCTQOIAK/935-cs-film-hd.png", "CSFilm.cz", "https://live.cdn.joj.sk/live/andromeda/cs_film-1080.m3u8"),
@@ -180,7 +178,7 @@ CHANNELS_SK = [
     ("Prima Love", "https://www.recenzer.cz/wp-content/uploads/2023/10/prima-love-logo.jpg", "PrimaLove.cz", "http://88.212.15.19/live/prima_love_avc_25p/playlist.m3u8"),
     ("TV LUX", "https://213.sk/wp-content/uploads/2020/11/tvlux.jpg", "TVLux.sk", "https://stream.tvlux.sk/luxtv/luxtv-livestream/playlist.m3u8"),
     ("TV Liptov", "https://yt3.googleusercontent.com/JJ6maA0dhvLU3z45Jhbgcc1brVZQswuPfYS6Da-Gli4MxXEPlhz5yuLkJlp7VL7mG7eSIxBORA=s900-c-k-c0x00ffffff-no-rj", "TVLiptov.sk", "http://95.105.255.137:1935/tvturiec/tvliptov.stream/playlist.m3u8"),
-    ("TV Nitrička", "https://www.satelitnatv.sk/wp-content/uploads/2013/04/nitricka.jpg", "TVNitricka.sk", "https://dash4.antik.sk/live/test_nitricka/playlist.m3u8"),
+    ("TV Nitrička", "https://www.satelitnatv.sk/wp-content/uploads/2013/04/nitricka.jpg", "TVNitrička.sk", "https://dash4.antik.sk/live/test_nitricka/playlist.m3u8"),
     ("TV9", "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg", "TV9.sk", "https://dash4.antik.sk/live/test_tv9/playlist.m3u8"),
     ("TV 8", "https://www.digislovakia.sk/wp-content/uploads/2023/04/TV8-logo-2-300x231.png", "TV8.sk", "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"),
     ("Senzi TV", "https://static.wikia.nocookie.net/cstv/images/8/85/Senzi.png", "Senzi.sk", "https://lb.streaming.sk/senzi/stream/playlist.m3u8"),
