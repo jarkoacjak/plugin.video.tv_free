@@ -9,6 +9,7 @@ import xbmcplugin
 import xbmcvfs
 import time
 import re
+import json
 from datetime import datetime, timezone, timedelta
 
 # --- Configuration (Kodi Engine) ---
@@ -20,8 +21,9 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
 LOCAL_XML_PATH = os.path.join(ADDON_DATA_PATH, "epg-cz.xml")
+CACHE_JSON_PATH = os.path.join(ADDON_DATA_PATH, "epg_cache.json")
 
-# Stabilná mapa kanálov pre tvoj odkaz XML
+# Presná mapa kanálov pre tvoj odkaz XML
 MAP_EPG = {
     "joj.sk": "joj.cz",
     "jojplus.sk": "jojplus.cz",
@@ -50,22 +52,6 @@ MAP_EPG = {
     "ctsport.cz": "ctsport.cz"
 }
 
-def download_and_save_xml():
-    """Stiahne .gz súbor, rozbalí ho a uloží na disk pre okamžité načítanie."""
-    url = "https://iptv-epg.org/files/epg-cz.xml.gz"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=12) as response:
-            with gzip.GzipFile(fileobj=response) as uncompressed:
-                xml_content = uncompressed.read().decode('utf-8', errors='ignore')
-                if xml_content and "<programme" in xml_content:
-                    with open(LOCAL_XML_PATH, "w", encoding="utf-8") as f:
-                        f.write(xml_content)
-                    return True
-    except Exception:
-        pass
-    return False
-
 def parse_xmltv_timestamp(date_str):
     try:
         date_str = date_str.strip()
@@ -86,43 +72,66 @@ def parse_xmltv_timestamp(date_str):
         pass
     return None
 
+def download_and_process_epg():
+    """Stiahne .gz, kompletne ho spracuje a uloží už iba hotový čistý zoznam programov do JSONu."""
+    url = "https://iptv-epg.org/files/epg-cz.xml.gz"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as response:
+            with gzip.GzipFile(fileobj=response) as uncompressed:
+                xml_data = uncompressed.read().decode('utf-8', errors='ignore')
+                
+        if xml_data and "<programme" in xml_data:
+            parsed_entries = []
+            pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
+            matches = re.findall(pattern, xml_data, re.DOTALL)
+            
+            for start_str, stop_str, channel_id, title in matches:
+                start_ts = parse_xmltv_timestamp(start_str)
+                stop_ts = parse_xmltv_timestamp(stop_str)
+                if start_ts and stop_ts:
+                    parsed_entries.append({
+                        'start': start_ts,
+                        'stop': stop_ts,
+                        'channel': channel_id.strip().lower(),
+                        'title': title.strip()
+                    })
+            
+            # Uložíme na disk spracovanú štruktúru - zápis aj čítanie trvá stotinu sekundy
+            with open(CACHE_JSON_PATH, "w", encoding="utf-8") as f:
+                json.dump(parsed_entries, f, ensure_ascii=False)
+            return True
+    except Exception:
+        pass
+    return False
+
 def get_current_epg_dict():
-    """Načíta XML z disku a bleskovo vybere programy pre aktuálny čas."""
-    if not os.path.exists(LOCAL_XML_PATH):
-        download_and_save_xml()
-        
+    """Bleskovo načíta pripravený JSON a vyfiltruje program pre aktuálnu sekundu."""
+    # Ak cache nemáme vôbec (prvé spustenie), stiahneme ju
+    if not os.path.exists(CACHE_JSON_PATH):
+        download_and_process_epg()
+
     current_epg = {}
-    
-    if os.path.exists(LOCAL_XML_PATH):
+    if os.path.exists(CACHE_JSON_PATH):
         try:
-            with open(LOCAL_XML_PATH, "r", encoding="utf-8") as f:
-                xml_data = f.read()
+            with open(CACHE_JSON_PATH, "r", encoding="utf-8") as f:
+                entries = json.load(f)
                 
-            if xml_data:
-                now_ts = datetime.now(timezone.utc).timestamp()
-                pattern = r'<programme start="([^"]*)" stop="([^"]*)" channel="([^"]*)">.*?<title[^>]*>(.*?)</title>'
-                matches = re.findall(pattern, xml_data, re.DOTALL)
-                
-                for start_str, stop_str, channel_id, title in matches:
-                    start_ts = parse_xmltv_timestamp(start_str)
-                    stop_ts = parse_xmltv_timestamp(stop_str)
-                    
-                    if start_ts and stop_ts and (start_ts <= now_ts < stop_ts):
-                        clean_title = title.strip()
-                        start_time = time.strftime("%H:%M", time.localtime(start_ts))
-                        end_time = time.strftime("%H:%M", time.localtime(stop_ts))
-                        
-                        # Vyčistíme ID kanálu od medzier a zmenšíme písmená
-                        clean_chan_id = channel_id.strip().lower()
-                        current_epg[clean_chan_id] = f"({start_time} - {end_time}) {clean_title}"
+            now_ts = time.time()  # Aktuálny lokálny čas zariadenia v timestamp formatu
+            
+            for entry in entries:
+                # Kontrola, či relácia prebieha práve teraz
+                if entry['start'] <= now_ts < entry['stop']:
+                    start_time = time.strftime("%H:%M", time.localtime(entry['start']))
+                    end_time = time.strftime("%H:%M", time.localtime(entry['stop']))
+                    current_epg[entry['channel']] = f"({start_time} - {end_time}) {entry['title']}"
         except Exception:
             pass
 
-    # Kontrola veku súboru: Ak má viac ako 2 hodiny, stiahne nový na pozadí
-    if os.path.exists(LOCAL_XML_PATH):
-        file_age = time.time() - os.path.getmtime(LOCAL_XML_PATH)
-        if file_age > 7200:
-            download_and_save_xml()
+    # Kontrola veku cache súboru na pozadí: Ak je starší ako 2 hodiny, stiahne nový pre budúce spustenie
+    if os.path.exists(CACHE_JSON_PATH):
+        if (time.time() - os.path.getmtime(CACHE_JSON_PATH)) > 7200:
+            download_and_process_epg()
 
     return current_epg
 
@@ -141,17 +150,14 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
         if epg_dict:
             tid_lower = tvg_id.strip().lower()
             
-            # Skúška 1: Hľadáme priamo cez MAP_EPG mapovanie
             if tid_lower in MAP_EPG:
                 target_id = MAP_EPG[tid_lower].lower()
                 if target_id in epg_dict:
                     current_program = epg_dict[target_id]
             
-            # Skúška 2: Ak nenašlo, otestujeme čisté tvg-id (ak by bolo rovnaké v XML)
             if not current_program and tid_lower in epg_dict:
                 current_program = epg_dict[tid_lower]
                 
-            # Skúška 3: Ak má príponu .sk, skúsime ju prepísať na .cz (častá vlastnosť tohto XML)
             if not current_program and tid_lower.endswith(".sk"):
                 cz_variant = tid_lower.replace(".sk", ".cz")
                 if cz_variant in epg_dict:
@@ -262,5 +268,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-
 
