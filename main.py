@@ -15,7 +15,7 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
     xbmcvfs.mkdir(ADDON_DATA_PATH)
 
 def add_directory_item(label, action, icon=None, is_folder=True, video_url=None, tvg_id=""):
-    """Pridá stanicu do zoznamu a natvrdo jej priradí text Živé vysielanie."""
+    """Pridá stanicu do zoznamu a natvrdo jej priradí správny text Živé vysielanie."""
     query = {'action': action}
     if video_url:
         query['url'] = video_url
@@ -23,7 +23,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
         
     url = f"{BASE_URL}?{urllib.parse.urlencode(query)}"
     
-    # Nastavenie fixného popisku namiesto EPG
+    # Oprava preklepu na čisté "Živé vysielanie"
     if not is_folder:
         display_label = f"{label}  |  Živé vysielanie"
         plot_info = f"Živé vysielanie stanice {label}."
@@ -129,4 +129,3 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-
