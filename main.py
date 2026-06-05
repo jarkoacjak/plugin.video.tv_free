@@ -23,8 +23,11 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
 LOCAL_XML_PATH = os.path.join(ADDON_DATA_PATH, "epg-cz.xml")
 CACHE_JSON_PATH = os.path.join(ADDON_DATA_PATH, "epg_cache.json")
 
+# Presná mapa kanálov pre tvoj odkaz XML
 MAP_EPG = {
     "markiza.sk": "markiza.cz",
+    "markizaklasik.sk": "markizaklasik.cz",
+    "markizakrimi.sk": "markizakrimi.cz",
     "joj.sk": "joj.cz",
     "jojplus.sk": "jojplus.cz",
     "jojkrimi.sk": "jojkrimi.cz",
@@ -178,6 +181,8 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 # --- DATA STATIONS ---
 CHANNELS_SK = [
     ("TV Markíza", "https://yt3.googleusercontent.com/HOc76AMK6PBO_ceM7LkBXYc6AS8sfe6PGj8YPe0A0Awgt-Yk9ODih40JLcS4jpCK0X6QTQFwVTM=s900-c-k-c0x00ffffff-no-rj", "Markíza.sk", "http://cdnsk003.panaccess.com/local/Markiza/index.m3u8"),
+    ("Markíza Klasik", "https://img.telkac.zoznam.sk/data/images/channel/2024/07/17/image_new_227.thumb.png", "MarkízaKlasik.sk", "https://cdnsk003.panaccess.com/local/Markiza_Klasik/index.m3u8"),
+    ("Markíza Krimi", "https://cmesk-ott-images-avod.ssl.cdn.cra.cz/rxn/q80/d07ef256-9ae0-496b-86a5-01101c2d00c1", "MarkízaKrimi.sk", "https://cdnsk003.panaccess.com/local/Markiza_krimi/index.m3u8"),
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
     ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JojKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
@@ -242,7 +247,7 @@ def list_czech_channels():
 
 def play_video(stream_url, title):
     if "panaccess.com" in stream_url:
-        # Pre Panaccess posielame čistú simuláciu bez postranných hlavičiek, aby sieť nespoznala Kodi prehrávač
+        # Pre tvoje lokálne Panaccess odkazy posielame čistú emuláciu Android prehliadača
         ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         final_url = f"{stream_url}|User-Agent={urllib.parse.quote(ua)}"
     elif "live.cdn.joj.sk" in stream_url or "joj-1080" in stream_url:
