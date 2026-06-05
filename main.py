@@ -242,10 +242,13 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    # Ak spúšťame Markízu, nepoužijeme hlavičky JOJky, aby server Panaccess spojenie nezablokoval
+    # Ak spúšťame tvoju Markízu z Panaccess, nasimulujeme prehliadač z Android tabletu
     if "panaccess.com" in stream_url:
-        final_url = stream_url
+        ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        origin = "http://cdnsk003.panaccess.com"
+        final_url = f"{stream_url}|User-Agent={urllib.parse.quote(ua)}&Origin={urllib.parse.quote(origin)}&Referer={urllib.parse.quote(origin)}/"
     else:
+        # Pre JOJ servery nechávame pôvodné nastavenie
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         referer = "https://www.joj.sk/"
         final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
