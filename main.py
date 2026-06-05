@@ -161,11 +161,11 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
                     current_program = epg_dict[cz_variant]
 
         if current_program:
-            # EPG text necháme LEN v popise (plot), čím zabránime konfliktu pri prehrávaní
+            # Vraciame program priamo do názvu položky vedľa stanice
+            display_label = f"{label}  |  {current_program}"
             plot_info = f"Práve beží:\n{current_program}"
-        
-        # Názov kanála v zozname zostane čistý bez časov, aby Kodi nezmätkovalo
-        display_label = label
+        else:
+            display_label = f"{label}  |  Živé vysielanie"
 
     list_item = xbmcgui.ListItem(label=display_label)
     if icon:
