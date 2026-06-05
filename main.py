@@ -23,7 +23,6 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
 LOCAL_XML_PATH = os.path.join(ADDON_DATA_PATH, "epg-cz.xml")
 CACHE_JSON_PATH = os.path.join(ADDON_DATA_PATH, "epg_cache.json")
 
-# Presná mapa kanálov pre tvoj odkaz XML
 MAP_EPG = {
     "markiza.sk": "markiza.cz",
     "joj.sk": "joj.cz",
@@ -242,16 +241,16 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    # Ak spúšťame tvoju Markízu z Panaccess, nasimulujeme prehliadač z Android tabletu
     if "panaccess.com" in stream_url:
+        # Pre Panaccess posielame čistú simuláciu bez postranných hlavičiek, aby sieť nespoznala Kodi prehrávač
         ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        origin = "http://cdnsk003.panaccess.com"
-        final_url = f"{stream_url}|User-Agent={urllib.parse.quote(ua)}&Origin={urllib.parse.quote(origin)}&Referer={urllib.parse.quote(origin)}/"
-    else:
-        # Pre JOJ servery nechávame pôvodné nastavenie
+        final_url = f"{stream_url}|User-Agent={urllib.parse.quote(ua)}"
+    elif "live.cdn.joj.sk" in stream_url or "joj-1080" in stream_url:
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         referer = "https://www.joj.sk/"
         final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
+    else:
+        final_url = stream_url
     
     list_item = xbmcgui.ListItem(path=final_url)
     list_item.setInfo('video', {'title': title})
