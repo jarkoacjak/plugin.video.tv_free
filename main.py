@@ -178,7 +178,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 
 # --- DATA STATIONS ---
 CHANNELS_SK = [
-    ("TV Markíza", "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/TV_Mark%C3%ADza_logo_2022.svg/1200px-TV_Mark%C3%ADza_logo_2022.svg.png", "Markíza.sk", "http://cdnsk003.panaccess.com/local/Markiza/index.m3u8"),
+    ("TV Markíza", "https://yt3.googleusercontent.com/HOc76AMK6PBO_ceM7LkBXYc6AS8sfe6PGj8YPe0A0Awgt-Yk9ODih40JLcS4jpCK0X6QTQFwVTM=s900-c-k-c0x00ffffff-no-rj", "Markíza.sk", "http://cdnsk003.panaccess.com/local/Markiza/index.m3u8"),
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
     ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JojKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
@@ -242,9 +242,13 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    referer = "https://www.joj.sk/"
-    final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
+    # Ak spúšťame Markízu, nepoužijeme hlavičky JOJky, aby server Panaccess spojenie nezablokoval
+    if "panaccess.com" in stream_url:
+        final_url = stream_url
+    else:
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        referer = "https://www.joj.sk/"
+        final_url = f"{stream_url}|User-Agent={urllib.parse.quote(user_agent)}&Referer={urllib.parse.quote(referer)}"
     
     list_item = xbmcgui.ListItem(path=final_url)
     list_item.setInfo('video', {'title': title})
