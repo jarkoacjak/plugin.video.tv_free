@@ -161,10 +161,11 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
                     current_program = epg_dict[cz_variant]
 
         if current_program:
-            display_label = f"{label}  |  {current_program}"
+            # EPG text necháme LEN v popise (plot), čím zabránime konfliktu pri prehrávaní
             plot_info = f"Práve beží:\n{current_program}"
-        else:
-            display_label = f"{label}  |  Živé vysielanie"
+        
+        # Názov kanála v zozname zostane čistý bez časov, aby Kodi nezmätkovalo
+        display_label = label
 
     list_item = xbmcgui.ListItem(label=display_label)
     if icon:
@@ -180,7 +181,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 
 # --- DATA STATIONS ---
 CHANNELS_SK = [
-    ("TV Markíza", "https://yt3.googleusercontent.com/HOc76AMK6PBO_ceM7LkBXYc6AS8sfe6PGj8YPe0A0Awgt-Yk9ODih40JLcS4jpCK0X6QTQFwVTM=s900-c-k-c0x00ffffff-no-rj", "Markíza.sk", "http://cdnsk003.panaccess.com/local/Markiza/index.m3u8"),
+    ("TV Markíza", "https://yt3.googleusercontent.com/HOc76AMK6PBO_ceM7LkBXYc6AS8sfe6PGj8YPe0A0Awgt-Yk9ODih40JLcS4jpCK0X6QTQFwVTM=s900-c-k-c0x00ffffff-no-rj", "Markíza.sk", "https://cdnsk003.panaccess.com/local/Markiza/index.m3u8"),
     ("Markíza Klasik", "https://img.telkac.zoznam.sk/data/images/channel/2024/07/17/image_new_227.thumb.png", "MarkízaKlasik.sk", "https://cdnsk003.panaccess.com/local/Markiza_Klasik/index.m3u8"),
     ("Markíza Krimi", "https://cmesk-ott-images-avod.ssl.cdn.cra.cz/rxn/q80/d07ef256-9ae0-496b-86a5-01101c2d00c1", "MarkízaKrimi.sk", "https://cdnsk003.panaccess.com/local/Markiza_krimi/index.m3u8"),
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
@@ -246,10 +247,7 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    # Ak ide o tvoj lokálny odkaz na hlavnú Markízu, spracujeme ho ako čistý direct prúd pre prehrávač v Kodi
-    if "panaccess.com/local/Markiza/index.m3u8" in stream_url:
-        final_url = f"{stream_url}|inputstream=addon"
-    elif "panaccess.com" in stream_url:
+    if "panaccess.com" in stream_url:
         ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         final_url = f"{stream_url}|User-Agent={urllib.parse.quote(ua)}"
     elif "live.cdn.joj.sk" in stream_url or "joj-1080" in stream_url:
