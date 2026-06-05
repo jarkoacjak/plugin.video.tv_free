@@ -246,8 +246,10 @@ def list_czech_channels():
     xbmcplugin.endOfDirectory(HANDLE)
 
 def play_video(stream_url, title):
-    if "panaccess.com" in stream_url:
-        # Pre tvoje lokálne Panaccess odkazy posielame čistú emuláciu Android prehliadača
+    # Ak ide o tvoj lokálny odkaz na hlavnú Markízu, spracujeme ho ako čistý direct prúd pre prehrávač v Kodi
+    if "panaccess.com/local/Markiza/index.m3u8" in stream_url:
+        final_url = f"{stream_url}|inputstream=addon"
+    elif "panaccess.com" in stream_url:
         ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         final_url = f"{stream_url}|User-Agent={urllib.parse.quote(ua)}"
     elif "live.cdn.joj.sk" in stream_url or "joj-1080" in stream_url:
