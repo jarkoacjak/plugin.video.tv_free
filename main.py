@@ -25,6 +25,7 @@ CACHE_JSON_PATH = os.path.join(ADDON_DATA_PATH, "epg_cache.json")
 
 # Presná mapa kanálov pre tvoj odkaz XML
 MAP_EPG = {
+    "markiza.sk": "markiza.cz",
     "joj.sk": "joj.cz",
     "jojplus.sk": "jojplus.cz",
     "jojkrimi.sk": "jojkrimi.cz",
@@ -73,7 +74,6 @@ def parse_xmltv_timestamp(date_str):
     return None
 
 def download_and_process_epg():
-    """Stiahne .gz, kompletne ho spracuje a uloží už iba hotový čistý zoznam programov do JSONu."""
     url = "https://iptv-epg.org/files/epg-cz.xml.gz"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -97,7 +97,6 @@ def download_and_process_epg():
                         'title': title.strip()
                     })
             
-            # Uložíme na disk spracovanú štruktúru - zápis aj čítanie trvá stotinu sekundy
             with open(CACHE_JSON_PATH, "w", encoding="utf-8") as f:
                 json.dump(parsed_entries, f, ensure_ascii=False)
             return True
@@ -106,8 +105,6 @@ def download_and_process_epg():
     return False
 
 def get_current_epg_dict():
-    """Bleskovo načíta pripravený JSON a vyfiltruje program pre aktuálnu sekundu."""
-    # Ak cache nemáme vôbec (prvé spustenie), stiahneme ju
     if not os.path.exists(CACHE_JSON_PATH):
         download_and_process_epg()
 
@@ -117,10 +114,9 @@ def get_current_epg_dict():
             with open(CACHE_JSON_PATH, "r", encoding="utf-8") as f:
                 entries = json.load(f)
                 
-            now_ts = time.time()  # Aktuálny lokálny čas zariadenia v timestamp formatu
+            now_ts = time.time()
             
             for entry in entries:
-                # Kontrola, či relácia prebieha práve teraz
                 if entry['start'] <= now_ts < entry['stop']:
                     start_time = time.strftime("%H:%M", time.localtime(entry['start']))
                     end_time = time.strftime("%H:%M", time.localtime(entry['stop']))
@@ -128,7 +124,6 @@ def get_current_epg_dict():
         except Exception:
             pass
 
-    # Kontrola veku cache súboru na pozadí: Ak je starší ako 2 hodiny, stiahne nový pre budúce spustenie
     if os.path.exists(CACHE_JSON_PATH):
         if (time.time() - os.path.getmtime(CACHE_JSON_PATH)) > 7200:
             download_and_process_epg()
@@ -183,6 +178,7 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
 
 # --- DATA STATIONS ---
 CHANNELS_SK = [
+    ("TV Markíza", "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/TV_Mark%C3%ADza_logo_2022.svg/1200px-TV_Mark%C3%ADza_logo_2022.svg.png", "Markíza.sk", "http://cdnsk003.panaccess.com/local/Markiza/index.m3u8"),
     ("TV JOJ", "https://yt3.googleusercontent.com/8rPXBoj2l1nhd9C-DCXF-s3tx0i_36GJzJcxeMyYvyPpPNakQsyc5DYc5d_QLDeI74ILkmFSJQ=s900-c-k-c0x00ffffff-no-rj", "JOJ.sk", "https://live.cdn.joj.sk/live/andromeda/joj-1080.m3u8"),
     ("JOJ Plus", "https://i.ibb.co/21Xx2nnd/joj-plus.png", "JOJPlus.sk", "https://live.cdn.joj.sk/live/andromeda/plus-1080.m3u8"),
     ("JOJ KRIMI", "https://img.telkac.zoznam.sk/data/images/channel/2026/03/04/image_new_137.thumb.png", "JojKrimi.sk", "https://live.cdn.joj.sk/live/andromeda/wau-1080.m3u8"),
