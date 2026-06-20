@@ -23,7 +23,7 @@ if not xbmcvfs.exists(ADDON_DATA_PATH):
 LOCAL_XML_PATH = os.path.join(ADDON_DATA_PATH, "epg-cz.xml")
 CACHE_JSON_PATH = os.path.join(ADDON_DATA_PATH, "epg_cache.json")
 
-# Presná mapa kanálov pre tvoj odkaz XML
+# Hlavná statická mapa pre mapovanie slovenských ID na české v XML zdroji
 MAP_EPG = {
     "markiza.sk": "markiza.cz",
     "markizaklasik.sk": "markizaklasik.cz",
@@ -160,8 +160,15 @@ def add_directory_item(label, action, icon=None, is_folder=True, video_url=None,
                 if cz_variant in epg_dict:
                     current_program = epg_dict[cz_variant]
 
+            if not current_program:
+                clean_tid = tid_lower.replace(".sk", "").replace(".cz", "").replace(" ", "").replace("-", "")
+                for epg_key, epg_val in epg_dict.items():
+                    clean_epg_key = epg_key.replace(".sk", "").replace(".cz", "").replace(" ", "").replace("-", "")
+                    if clean_tid == clean_epg_key or clean_tid in clean_epg_key or clean_epg_key in clean_tid:
+                        current_program = epg_val
+                        break
+
         if current_program:
-            # Vraciame program priamo do názvu položky vedľa stanice
             display_label = f"{label}  |  {current_program}"
             plot_info = f"Práve beží:\n{current_program}"
         else:
@@ -275,4 +282,4 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-
+        
