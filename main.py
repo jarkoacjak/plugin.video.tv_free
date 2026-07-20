@@ -49,6 +49,9 @@ MAP_EPG = {
     "tv8.sk": "tv8.cz",
     "senzi.sk": "senzi.cz",
     "flowtv.sk": "flowtv.cz",
+    "tvbratislava.sk": "tvbratislava.cz",
+    "tvsen.sk": "tvsen.cz",
+    "tvturiec.sk": "tvturiec.cz",
     "minimax.cz": "minimax.cz",
     "ocko.cz": "ocko.cz",
     "ct24.cz": "ct24.cz",
@@ -211,7 +214,10 @@ CHANNELS_SK = [
     ("TV9", "https://www.fotelka.tv/image/cache/catalog/Regionalne/TV9-240x234.jpg", "TV9.sk", "https://dash4.antik.sk/live/test_tv9/playlist.m3u8"),
     ("TV 8", "https://www.digislovakia.sk/wp-content/uploads/2023/04/TV8-logo-2-300x231.png", "TV8.sk", "http://109.74.145.11:1935/tv8/ngrp:tv8.stream_all/playlist.m3u8"),
     ("Senzi TV", "https://static.wikia.nocookie.net/cstv/images/8/85/Senzi.png", "Senzi.sk", "https://lb.streaming.sk/senzi/stream/playlist.m3u8"),
-    ("Flow TV", "https://www.flowtv.sk/wp-content/uploads/2021/04/logo_flow_tv_web.png", "FlowTV.sk", "https://app.viloud.tv/hls/channel/04e456809c83928443e59f0a2fce8610.m3u8")
+    ("Flow TV", "https://www.flowtv.sk/wp-content/uploads/2021/04/logo_flow_tv_web.png", "FlowTV.sk", "https://app.viloud.tv/hls/channel/04e456809c83928443e59f0a2fce8610.m3u8"),
+    ("TV Bratislava", "https://iptv-org.github.io/images/logos/sk/TVBratislava.png", "TVBratislava.sk", "https://cdnsk003.panaccess.com/local/Bratislava/index.m3u8"),
+    ("TV Sen", "https://yt3.googleusercontent.com/ytc/AIdro_lRJ8RJutx6bRbatFwSHNoO4STtV7xbas3lDC3WLlm56Q=s900-c-k-c0x00ffffff-no-rj", "TVSen.sk", "https://cdnsk003.panaccess.com/local/TV_SEN_DC/index.m3u8"),
+    ("TV Turiec", "https://graph.facebook.com/tvturiec/picture?type=large", "TVTuriec.sk", "https://cdnsk003.panaccess.com/local/Turiec/index.m3u8")
 ]
 
 CHANNELS_CZ = [
@@ -282,4 +288,3 @@ if __name__ == '__main__':
         generate_pvr_playlist()
     else:
         show_main_menu()
-        
